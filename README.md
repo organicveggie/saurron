@@ -1,3 +1,7 @@
+<div align="center">
+
+  <img src=“./logo.png” width=“450” />
+
 # Saurron
 
 [![Build Status](https://github.com/organicveggie/saurron/actions/workflows/rust.yml/badge.svg)](https://github.com/organicveggie/saurron/actions/workflows/rust.yml) [![License](https://img.shields.io/github/license/organicveggie/saurron)](https://github.com/organicveggie/saurron/blob/master/LICENSE)
@@ -5,6 +9,7 @@
 **Ever-watchful eye for your Docker containers.** Saurron monitors containers on a single host, detects newer images, and automatically updates them — with safe rollback, structured audit logging, and flexible notifications.
 
 Inspired by [Watchtower](https://github.com/containrrr/watchtower).
+</div>
 
 ---
 
@@ -97,9 +102,3 @@ Control per-container behaviour with Docker labels:
 | `saurron.stop-timeout`       | e.g. `30s`       | Override graceful stop timeout   |
 | `saurron.depends-on`         | container names  | Explicit dependency ordering     |
 | `saurron.semver-pre-release` | `true` / `false` | Include pre-release versions     |
-
----
-
-## License
-
-Apache 2.0
