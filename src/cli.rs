@@ -10,7 +10,6 @@ use serde::Deserialize;
 )]
 pub struct Args {
     // === General ===
-
     /// Path to TOML config file (default: /etc/saurron/config.toml)
     #[arg(long, env = "SAURRON_CONFIG", value_name = "PATH")]
     pub config: Option<String>,
@@ -36,7 +35,6 @@ pub struct Args {
     pub audit_log: Option<String>,
 
     // === Docker Connection ===
-
     /// Docker daemon socket or host URL (default: unix:///var/run/docker.sock)
     #[arg(long, env = "DOCKER_HOST", value_name = "URI")]
     pub host: Option<String>,
@@ -62,7 +60,6 @@ pub struct Args {
     pub api_version: Option<String>,
 
     // === Scheduling ===
-
     /// Poll interval as duration (e.g. 5m, 1h); default: 24h
     #[arg(
         long,
@@ -92,7 +89,6 @@ pub struct Args {
     pub run_once: Option<bool>,
 
     // === Container Selection ===
-
     /// Only update containers with saurron.enable=true label
     #[arg(long, env = "SAURRON_LABEL_ENABLE", default_missing_value = "true", num_args = 0..=1)]
     pub label_enable: Option<bool>,
@@ -125,7 +121,6 @@ pub struct Args {
     pub global_takes_precedence: Option<bool>,
 
     // === Update Strategy ===
-
     /// Detect and notify only; do not pull or restart
     #[arg(
         long,
@@ -167,7 +162,6 @@ pub struct Args {
     pub stop_timeout: Option<String>,
 
     // === Rollback ===
-
     /// Rollback if new container exits non-zero (default: enabled)
     #[arg(
         long,
@@ -215,7 +209,6 @@ pub struct Args {
     pub startup_timeout: Option<String>,
 
     // === Registry ===
-
     /// Warning behaviour for failed HEAD requests
     #[arg(
         long,
@@ -226,7 +219,6 @@ pub struct Args {
     pub head_warn_strategy: Option<HeadWarnStrategy>,
 
     // === HTTP API ===
-
     /// Enable POST /v1/update endpoint
     #[arg(
         long,
@@ -263,7 +255,6 @@ pub struct Args {
     pub http_api_metrics_no_auth: Option<bool>,
 
     // === Notifications — General ===
-
     /// Delay between cycle completion and notification dispatch (e.g. 30s)
     #[arg(long, env = "SAURRON_NOTIFICATION_DELAY", value_name = "DURATION")]
     pub notification_delay: Option<String>,
@@ -273,7 +264,6 @@ pub struct Args {
     pub notification_template: Option<String>,
 
     // === Notifications — Webhook ===
-
     /// URL to POST notification payloads to
     #[arg(long, env = "SAURRON_WEBHOOK_URL", value_name = "URL")]
     pub webhook_url: Option<String>,
@@ -292,7 +282,6 @@ pub struct Args {
     pub webhook_tls_skip_verify: Option<bool>,
 
     // === Notifications — Email ===
-
     /// Sender email address
     #[arg(long, env = "SAURRON_NOTIFICATION_EMAIL_FROM", value_name = "ADDRESS")]
     pub notification_email_from: Option<String>,
@@ -319,7 +308,11 @@ pub struct Args {
     pub notification_email_user: Option<String>,
 
     /// SMTP auth password
-    #[arg(long, env = "SAURRON_NOTIFICATION_EMAIL_PASSWORD", value_name = "PASSWORD")]
+    #[arg(
+        long,
+        env = "SAURRON_NOTIFICATION_EMAIL_PASSWORD",
+        value_name = "PASSWORD"
+    )]
     pub notification_email_password: Option<String>,
 
     /// Skip TLS cert verification for SMTP
@@ -332,7 +325,6 @@ pub struct Args {
     pub notification_email_tls_skip_verify: Option<bool>,
 
     // === Notifications — MQTT ===
-
     /// MQTT broker URL (e.g. tcp://broker.example.com:1883)
     #[arg(long, env = "SAURRON_NOTIFICATION_MQTT_BROKER", value_name = "URL")]
     pub notification_mqtt_broker: Option<String>,
@@ -354,17 +346,28 @@ pub struct Args {
     pub notification_mqtt_username: Option<String>,
 
     /// MQTT broker auth password
-    #[arg(long, env = "SAURRON_NOTIFICATION_MQTT_PASSWORD", value_name = "PASSWORD")]
+    #[arg(
+        long,
+        env = "SAURRON_NOTIFICATION_MQTT_PASSWORD",
+        value_name = "PASSWORD"
+    )]
     pub notification_mqtt_password: Option<String>,
 
     // === Notifications — Pushover ===
-
     /// Pushover application API token
-    #[arg(long, env = "SAURRON_NOTIFICATION_PUSHOVER_TOKEN", value_name = "TOKEN")]
+    #[arg(
+        long,
+        env = "SAURRON_NOTIFICATION_PUSHOVER_TOKEN",
+        value_name = "TOKEN"
+    )]
     pub notification_pushover_token: Option<String>,
 
     /// Pushover user or group key
-    #[arg(long, env = "SAURRON_NOTIFICATION_PUSHOVER_USER_KEY", value_name = "KEY")]
+    #[arg(
+        long,
+        env = "SAURRON_NOTIFICATION_PUSHOVER_USER_KEY",
+        value_name = "KEY"
+    )]
     pub notification_pushover_user_key: Option<String>,
 }
 
