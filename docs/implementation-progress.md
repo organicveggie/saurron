@@ -22,7 +22,24 @@
 
 ## Phase 2 — Docker client & container enumeration
 
-**Status:** Not started
+**Status:** In progress
+
+---
+
+### Step 1 — Docker client module (connection)
+
+**Status:** Complete
+
+**Completed work:**
+
+- `Cargo.toml` — `bollard` updated to `{ version = "0.17", features = ["ssl"] }`; bollard's `ssl` feature uses rustls internally (no OpenSSL dependency)
+- `src/docker.rs` (new) — `DockerClient` wrapping `bollard::Docker`; `ConnectionType` enum (`Socket`/`Http`/`Https`); `connection_type(host, tls_verify)` pure fn for scheme detection; `parse_api_version()` pure fn supporting `"1.44"` and `"v1.44"` formats; `DockerClient::connect(config)` builds the bollard connection (Unix socket via `connect_with_socket`, plain TCP via `connect_with_http`, TLS via `connect_with_ssl` with file-path cert arguments); `DockerClient::ping()` async; 11 unit tests covering all connection type cases and API version parsing
+- `src/main.rs` — `mod docker` declared; converted to `#[tokio::main] async fn main`; calls `DockerClient::connect` + `.ping()` on startup and logs success
+
+**Notes:**
+- `bollard::ssl` feature gates `connect_with_ssl`, which takes cert/key/CA as `&Path` directly — no need for `rustls`/`rustls-pemfile` as direct dependencies
+- Server-only TLS (no client cert) is supported: passing empty `PathBuf` for key/cert causes bollard's `DockerClientCertResolver` to return `None`, skipping client auth
+- Hardcoded 120s connect timeout in all `connect_with_*` calls; tracked as a TODO to make this a `DockerConfig` field at end of Phase 2
 
 ---
 
