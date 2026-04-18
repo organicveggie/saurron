@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
@@ -154,6 +154,75 @@ fn parse_depends_on(value: &str) -> Vec<String> {
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
         .collect()
+}
+
+// ── Container selection ───────────────────────────────────────────────────────
+
+pub struct ContainerSelector {
+    label_enable: bool,
+    global_takes_precedence: bool,
+    disabled_names: HashSet<String>,
+    include_restarting: bool,
+    revive_stopped: bool,
+}
+
+impl ContainerSelector {
+    pub fn new(
+        label_enable: bool,
+        global_takes_precedence: bool,
+        disable_containers: &[String],
+        include_restarting: bool,
+        revive_stopped: bool,
+    ) -> Self {
+        Self {
+            label_enable,
+            global_takes_precedence,
+            disabled_names: disable_containers.iter().cloned().collect(),
+            include_restarting,
+            revive_stopped,
+        }
+    }
+
+    /// Returns the Docker container state strings to pass as list filters.
+    pub fn state_filter(&self) -> Vec<&'static str> {
+        let mut states = vec!["running"];
+        if self.include_restarting {
+            states.push("restarting");
+        }
+        if self.revive_stopped {
+            states.push("exited");
+            states.push("created");
+        }
+        states
+    }
+
+    /// Returns true if this container should be included in the update cycle.
+    pub fn is_selected(&self, container: &ContainerInfo) -> bool {
+        if self.disabled_names.contains(&container.name) {
+            return false;
+        }
+
+        let labels = container.saurron_labels();
+
+        if self.label_enable {
+            // Opt-in: only containers explicitly enabled via label
+            matches!(labels.enable, Some(true))
+        } else if self.global_takes_precedence {
+            // Opt-out with global precedence: per-container disable label is ignored
+            true
+        } else {
+            // Opt-out: include unless the container opts out via label
+            !matches!(labels.enable, Some(false))
+        }
+    }
+
+    pub fn select(&self, containers: &[ContainerInfo]) -> Vec<ContainerInfo> {
+        containers
+            .iter()
+            .filter(|c| self.is_selected(c))
+            .cloned()
+            .collect()
+    }
 }
 
 // ── Docker client ─────────────────────────────────────────────────────────────
@@ -454,5 +523,164 @@ mod tests {
         let sl = info.saurron_labels();
         assert_eq!(sl.enable, Some(true));
         assert_eq!(sl.image_tag, Some("stable".to_string()));
+    }
+
+    // ── ContainerSelector ─────────────────────────────────────────────────────
+
+    fn make_container(name: &str, state: ContainerState, ls: &[(&str, &str)]) -> ContainerInfo {
+        ContainerInfo {
+            id: format!("{name}_id"),
+            name: name.to_string(),
+            image: format!("{name}:latest"),
+            image_id: "sha256:abc".to_string(),
+            state,
+            labels: labels(ls),
+        }
+    }
+
+    fn running(name: &str, ls: &[(&str, &str)]) -> ContainerInfo {
+        make_container(name, ContainerState::Running, ls)
+    }
+
+    fn opt_out() -> ContainerSelector {
+        ContainerSelector::new(false, false, &[], false, false)
+    }
+
+    fn opt_in() -> ContainerSelector {
+        ContainerSelector::new(true, false, &[], false, false)
+    }
+
+    // State filter
+
+    #[test]
+    fn state_filter_default_is_running_only() {
+        assert_eq!(opt_out().state_filter(), vec!["running"]);
+    }
+
+    #[test]
+    fn state_filter_include_restarting() {
+        let sel = ContainerSelector::new(false, false, &[], true, false);
+        assert_eq!(sel.state_filter(), vec!["running", "restarting"]);
+    }
+
+    #[test]
+    fn state_filter_revive_stopped() {
+        let sel = ContainerSelector::new(false, false, &[], false, true);
+        assert_eq!(sel.state_filter(), vec!["running", "exited", "created"]);
+    }
+
+    #[test]
+    fn state_filter_both_flags() {
+        let sel = ContainerSelector::new(false, false, &[], true, true);
+        assert_eq!(
+            sel.state_filter(),
+            vec!["running", "restarting", "exited", "created"]
+        );
+    }
+
+    // Opt-out selection
+
+    #[test]
+    fn opt_out_no_labels_included() {
+        assert!(opt_out().is_selected(&running("app", &[])));
+    }
+
+    #[test]
+    fn opt_out_enable_true_included() {
+        assert!(opt_out().is_selected(&running("app", &[("saurron.enable", "true")])));
+    }
+
+    #[test]
+    fn opt_out_enable_false_excluded() {
+        assert!(!opt_out().is_selected(&running("app", &[("saurron.enable", "false")])));
+    }
+
+    // Opt-in selection
+
+    #[test]
+    fn opt_in_no_labels_excluded() {
+        assert!(!opt_in().is_selected(&running("app", &[])));
+    }
+
+    #[test]
+    fn opt_in_enable_true_included() {
+        assert!(opt_in().is_selected(&running("app", &[("saurron.enable", "true")])));
+    }
+
+    #[test]
+    fn opt_in_enable_false_excluded() {
+        assert!(!opt_in().is_selected(&running("app", &[("saurron.enable", "false")])));
+    }
+
+    // disable_containers
+
+    #[test]
+    fn disabled_name_excluded_in_opt_out() {
+        let sel = ContainerSelector::new(false, false, &["app".to_string()], false, false);
+        assert!(!sel.is_selected(&running("app", &[("saurron.enable", "true")])));
+    }
+
+    #[test]
+    fn disabled_name_excluded_in_opt_in() {
+        let sel = ContainerSelector::new(true, false, &["app".to_string()], false, false);
+        assert!(!sel.is_selected(&running("app", &[("saurron.enable", "true")])));
+    }
+
+    #[test]
+    fn non_disabled_name_unaffected() {
+        let sel = ContainerSelector::new(false, false, &["other".to_string()], false, false);
+        assert!(sel.is_selected(&running("app", &[])));
+    }
+
+    // global_takes_precedence
+
+    #[test]
+    fn global_precedence_overrides_per_container_disable() {
+        let sel = ContainerSelector::new(false, true, &[], false, false);
+        assert!(sel.is_selected(&running("app", &[("saurron.enable", "false")])));
+    }
+
+    #[test]
+    fn global_precedence_disable_containers_still_excluded() {
+        let sel = ContainerSelector::new(false, true, &["app".to_string()], false, false);
+        assert!(!sel.is_selected(&running("app", &[])));
+    }
+
+    #[test]
+    fn global_precedence_no_label_still_included() {
+        let sel = ContainerSelector::new(false, true, &[], false, false);
+        assert!(sel.is_selected(&running("app", &[])));
+    }
+
+    // select()
+
+    #[test]
+    fn select_returns_only_matching_containers() {
+        let containers = vec![
+            running("enabled", &[("saurron.enable", "true")]),
+            running("unlabelled", &[]),
+            running("disabled", &[("saurron.enable", "false")]),
+        ];
+        let result = opt_out().select(&containers);
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().any(|c| c.name == "enabled"));
+        assert!(result.iter().any(|c| c.name == "unlabelled"));
+    }
+
+    #[test]
+    fn select_empty_input_returns_empty() {
+        assert!(opt_out().select(&[]).is_empty());
+    }
+
+    #[test]
+    fn select_opt_in_filters_to_enabled_only() {
+        let containers = vec![
+            running("a", &[("saurron.enable", "true")]),
+            running("b", &[]),
+            running("c", &[("saurron.enable", "true")]),
+        ];
+        let result = opt_in().select(&containers);
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().all(|c| c.name == "a" || c.name == "c"));
     }
 }

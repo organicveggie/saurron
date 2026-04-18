@@ -41,6 +41,33 @@
 - Server-only TLS (no client cert) is supported: passing empty `PathBuf` for key/cert causes bollard's `DockerClientCertResolver` to return `None`, skipping client auth
 - Hardcoded 120s connect timeout in all `connect_with_*` calls; tracked as a TODO to make this a `DockerConfig` field at end of Phase 2
 
+### Step 2 — Container data model & label parsing
+
+**Status:** Complete
+
+**Completed work:**
+
+- `src/docker.rs` — added `use std::collections::HashMap`
+- `ContainerState` enum (`Created`/`Restarting`/`Running`/`Removing`/`Paused`/`Exited`/`Dead`/`Unknown(String)`) with `from_str()` and `Display` impl
+- `ContainerInfo` struct (`id`, `name`, `image`, `image_id`, `state: ContainerState`, `labels: HashMap<String, String>`) with `.saurron_labels()` convenience method
+- `SaurronLabels` struct (`enable: Option<bool>`, `scope: Option<String>`, `depends_on: Vec<String>`, `image_tag: Option<String>`) with `from_labels()`, `Default` derive; label keys: `saurron.enable`, `saurron.scope`, `saurron.depends-on`, `saurron.image-tag`
+- `parse_bool_label()` — case-insensitive, accepts only `"true"`/`"false"`, returns `None` for anything else
+- `parse_depends_on()` — splits on comma, trims whitespace, filters empty entries
+- 23 new unit tests (34 total): all `ContainerState` variants, `Display`, and full edge-case coverage of `SaurronLabels::from_labels()`
+
+### Step 3 — State filtering & selection logic
+
+**Status:** Complete
+
+**Completed work:**
+
+- `src/docker.rs` — added `use std::collections::HashSet`
+- `ContainerSelector` struct with fields: `label_enable`, `global_takes_precedence`, `disabled_names: HashSet<String>`, `include_restarting`, `revive_stopped`
+- `state_filter()` — returns `["running"]` base, appends `"restarting"` if `--include-restarting`, appends `"exited"`/`"created"` if `--revive-stopped`
+- `is_selected()` — hard-excludes by `disabled_names`, then: opt-in mode (`label_enable=true`) requires `saurron.enable=true`; opt-out + `global_takes_precedence=true` ignores per-container disable labels; opt-out default excludes only containers with `saurron.enable=false`
+- `select()` — filters a `&[ContainerInfo]` slice, returning owned `Vec<ContainerInfo>`
+- 19 new unit tests (53 total): state filter combinations, opt-in/opt-out behaviour, `disable_containers` hard-exclude, `global_takes_precedence` override, and `select()` end-to-end
+
 ---
 
 ## Phase 3 — Structured logging & audit trail
