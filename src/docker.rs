@@ -225,6 +225,24 @@ impl ContainerSelector {
     }
 }
 
+// ── Bollard summary → ContainerInfo ──────────────────────────────────────────
+
+fn summary_to_info(s: bollard::models::ContainerSummary) -> Option<ContainerInfo> {
+    Some(ContainerInfo {
+        id: s.id?,
+        name: s
+            .names
+            .as_deref()
+            .and_then(|v| v.first())
+            .map(|n| n.trim_start_matches('/').to_string())
+            .unwrap_or_default(),
+        image: s.image.unwrap_or_default(),
+        image_id: s.image_id.unwrap_or_default(),
+        state: ContainerState::from_str(s.state.as_deref().unwrap_or("unknown")),
+        labels: s.labels.unwrap_or_default(),
+    })
+}
+
 // ── Docker client ─────────────────────────────────────────────────────────────
 
 impl DockerClient {
@@ -280,6 +298,39 @@ impl DockerClient {
             .await
             .context("Docker daemon ping failed")?;
         Ok(())
+    }
+
+    pub async fn list_containers(
+        &self,
+        selector: &ContainerSelector,
+    ) -> Result<Vec<ContainerInfo>> {
+        use bollard::container::ListContainersOptions;
+        let status_filter: Vec<String> = selector
+            .state_filter()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let mut filters = HashMap::new();
+        filters.insert("status".to_string(), status_filter);
+        let opts = ListContainersOptions {
+            all: true,
+            filters,
+            ..Default::default()
+        };
+        let summaries = self
+            .inner
+            .list_containers(Some(opts))
+            .await
+            .context("failed to list containers")?;
+        Ok(summaries.into_iter().filter_map(summary_to_info).collect())
+    }
+
+    pub fn select_containers(
+        &self,
+        containers: &[ContainerInfo],
+        selector: &ContainerSelector,
+    ) -> Vec<ContainerInfo> {
+        selector.select(containers)
     }
 }
 

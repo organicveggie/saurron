@@ -22,7 +22,7 @@
 
 ## Phase 2 — Docker client & container enumeration
 
-**Status:** In progress
+**Status:** Complete
 
 ---
 
@@ -67,6 +67,19 @@
 - `is_selected()` — hard-excludes by `disabled_names`, then: opt-in mode (`label_enable=true`) requires `saurron.enable=true`; opt-out + `global_takes_precedence=true` ignores per-container disable labels; opt-out default excludes only containers with `saurron.enable=false`
 - `select()` — filters a `&[ContainerInfo]` slice, returning owned `Vec<ContainerInfo>`
 - 19 new unit tests (53 total): state filter combinations, opt-in/opt-out behaviour, `disable_containers` hard-exclude, `global_takes_precedence` override, and `select()` end-to-end
+
+### Step 4 — Enumeration & wire to main (milestone)
+
+**Status:** Complete
+
+**Completed work:**
+
+- `src/docker.rs` — `summary_to_info()` private fn mapping `bollard::models::ContainerSummary` → `ContainerInfo` (strips leading `/` from Docker name, handles all `Option` fields gracefully, skips rows with no `id`)
+- `DockerClient::list_containers(selector)` — calls bollard `list_containers` with `all: true` and a `status` filter built from `selector.state_filter()`; returns `Vec<ContainerInfo>`
+- `DockerClient::select_containers(containers, selector)` — delegates to `selector.select()`; thin wrapper for ergonomic call site in `main.rs`
+- `src/main.rs` — builds `ContainerSelector` from `Config`; calls `list_containers` → `select_containers`; logs summary count line + one `info!` line per selected container (id, name, image, state)
+
+**Milestone verification:** Binary enumerates containers on live Docker daemon, applies all inclusion/exclusion rules, prints structured list.
 
 ---
 
