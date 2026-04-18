@@ -17,12 +17,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
 
-      - name: Lists tests
-        run: cargo test -- --list
-      
-      - name: Run tests
-        run: cargo test --verbose
-
       - name: Generate code coverage
         run: |
           cargo install cargo-tarpaulin
