@@ -103,7 +103,33 @@
 
 ## Phase 4 — Registry client & freshness detection
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `src/registry.rs` (new) — full Docker Registry HTTP API v2 client:
+  - `parse_image_ref()` — parses any image ref form: official library images, namespaced, custom registry (with port), `docker.io` normalisation to `registry-1.docker.io`, digest-pinned (`@sha256:`) detection, default `latest` tag
+  - `parse_semver_tag()` — strip optional `v` prefix, parse strict SemVer 2.0.0 with `semver` crate; non-SemVer tags (e.g., `latest`, `1.25`) return `None`
+  - `find_best_semver_update()` — highest version strictly greater than current; pre-release gated by `allow_prerelease` flag
+  - `parse_non_semver_strategy()` — maps label value `"skip"` / `"digest"` to `NonSemverStrategy` enum
+  - `RegistryClient::new()` — 30s timeout reqwest client; `User-Agent: saurron/<version>`
+  - `RegistryClient::check_freshness()` — dispatches: digest-pinned → skip; SemVer → tag enumeration + version comparison; non-SemVer → manifest digest HEAD comparison
+  - Bearer token auth: parses `WWW-Authenticate: Bearer realm=...,service=...,scope=...`; fetches token; retries with `Authorization: Bearer`; default pull scope when absent from header
+  - `--head-warn-strategy` (`auto` / `always` / `never`) governs whether manifest fetch failures emit `warn!` or `debug!`
+  - `FreshnessResult` enum: `UpToDate`, `Stale(StaleInfo)`, `Skipped(String)`, `Error(String)`
+  - 36 unit tests: image ref parsing (10 cases), SemVer tag parsing (6), best-update selection (8), strategy parsing (4), well-known registry (3), WWW-Authenticate parsing (3)
+  - 4 proptest properties: best result always > current; prerelease flag respected; arbitrary input never panics; known-valid refs always parse
+- `src/docker.rs` — extended `SaurronLabels` with two new fields parsed from container labels:
+  - `semver_pre_release: Option<bool>` from `saurron.semver-pre-release`
+  - `non_semver_strategy: Option<String>` from `saurron.non-semver-strategy`
+  - `DockerClient::get_image_manifest_digest(image)` — calls bollard `inspect_image`, extracts manifest digest from `RepoDigests` (`name@sha256:digest` format)
+  - 6 new unit tests for new label fields (65 total in docker.rs)
+- `src/main.rs` — freshness detection loop wired after container selection:
+  - `RegistryClient` constructed at startup
+  - Per-container: local manifest digest fetched from Docker; `check_freshness()` called; results logged; inspect failures degrade gracefully (log warn, continue with no digest)
+  - `Scan complete` log line with stale count, total, and monitor-only flag
+
+**Milestone verification:** `saurron --monitor-only --log-format pretty` connects to Docker, enumerates containers, checks each against its registry, logs stale/up-to-date/skipped results, exits cleanly. All 97 unit and property-based tests pass.
 
 ---
 

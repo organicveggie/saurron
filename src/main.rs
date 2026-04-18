@@ -2,10 +2,11 @@ mod audit;
 mod cli;
 mod config;
 mod docker;
+mod registry;
 
 use anyhow::Context as _;
 use clap::Parser;
-use tracing::info;
+use tracing::{info, warn};
 
 const VERSION: &str = env!("SAURRON_VERSION");
 
@@ -117,6 +118,70 @@ async fn main() -> anyhow::Result<()> {
     for c in &selected {
         info!(id = %c.id, name = %c.name, image = %c.image, state = %c.state, "Container selected");
     }
+
+    let registry_client = registry::RegistryClient::new(config.head_warn_strategy, VERSION)
+        .context("failed to initialise registry client")?;
+
+    let mut stale_count = 0usize;
+    for container in &selected {
+        let local_digest = match docker.get_image_manifest_digest(&container.image).await {
+            Ok(d) => d,
+            Err(e) => {
+                warn!(
+                    container = %container.name,
+                    image = %container.image,
+                    error = %e,
+                    "failed to inspect local image; treating as no local digest"
+                );
+                None
+            }
+        };
+
+        let labels = container.saurron_labels();
+        let allow_pre = labels.semver_pre_release.unwrap_or(false);
+        let strategy = labels
+            .non_semver_strategy
+            .as_deref()
+            .map(registry::parse_non_semver_strategy)
+            .unwrap_or_default();
+
+        let result = registry_client
+            .check_freshness(
+                &container.image,
+                local_digest.as_deref(),
+                allow_pre,
+                strategy,
+            )
+            .await;
+
+        match &result {
+            registry::FreshnessResult::UpToDate => {
+                tracing::debug!(container = %container.name, "image up to date");
+            }
+            registry::FreshnessResult::Stale(info) => {
+                stale_count += 1;
+                info!(
+                    container = %container.name,
+                    current_digest = %info.current_digest,
+                    new_image = %info.new_image,
+                    "stale image detected"
+                );
+            }
+            registry::FreshnessResult::Skipped(reason) => {
+                info!(container = %container.name, reason, "freshness check skipped");
+            }
+            registry::FreshnessResult::Error(reason) => {
+                warn!(container = %container.name, reason, "freshness check failed");
+            }
+        }
+    }
+
+    info!(
+        stale = stale_count,
+        total = selected.len(),
+        monitor_only = config.monitor_only,
+        "Scan complete"
+    );
 
     Ok(())
 }
