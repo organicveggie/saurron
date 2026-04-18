@@ -19,9 +19,33 @@
 
 **Work:**
 
-- `bollard` integration: Unix socket default (`/var/run/docker.sock`), TLS support (`--tlsverify`, `--tls-ca-cert`, `--tls-cert`, `--tls-key`), configurable API version (`--api-version`)
-- Container listing filtered by state (running/stopped/restarting) per flags
-- Selection logic: opt-out default, `--label-enable` opt-in, `--disable-containers`, per-container `saurron.*` label parsing
+### Step 1 — Docker client module (connection)
+
+- New `src/docker.rs`: `DockerClient` wrapping `bollard::Docker`
+- `DockerClient::connect(config: &DockerConfig)`: detects host scheme (unix socket vs TCP), applies TLS certs (`--tlsverify`, `--tls-ca-cert`, `--tls-cert`, `--tls-key`), and configurable API version (`--api-version`)
+- `DockerClient::ping()`: verifies daemon is reachable
+- Unit tests for scheme detection and API version parsing (pure logic, no daemon required)
+- Wire `mod docker;` into `main.rs`; convert to `async` main; call `connect` + `ping` on startup
+- Add `rustls` feature to `bollard`; add `rustls` and `rustls-pemfile` deps for TLS cert loading
+
+### Step 2 — Container data model & label parsing
+
+- `ContainerInfo` struct: id, name, image, image\_id, state, raw labels
+- `SaurronLabels` struct parsed from `HashMap<String, String>`: `enable`, `scope`, `depends_on`, `image_tag`
+- `SaurronLabels::from_labels()`: pure parsing function
+- Full unit tests for label parsing edge cases
+
+### Step 3 — State filtering & selection logic
+
+- State filter: always include `running`; add `restarting` if `--include-restarting`; add `exited`/`created` if `--revive-stopped`; stopped containers excluded unless `--revive-stopped`
+- Selection logic: opt-out default (all unless `saurron.enable=false`); opt-in if `--label-enable` (only `saurron.enable=true`); `--disable-containers` exclusion list; `--global-takes-precedence` interaction
+- Unit tests with mock `ContainerInfo` vectors
+
+### Step 4 — Enumeration & wire to main (milestone)
+
+- `DockerClient::list_containers()`: calls bollard list API with state filters from Step 3
+- `DockerClient::select_containers()`: applies Step 3 selection logic
+- Wire into `main.rs`: connect → enumerate → select → log structured list
 
 **Milestone:** Binary enumerates containers on live Docker daemon, applies all inclusion/exclusion rules, prints structured list.
 

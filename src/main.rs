@@ -1,12 +1,14 @@
 mod cli;
 mod config;
+mod docker;
 
 use clap::Parser;
 use tracing::info;
 
 const VERSION: &str = env!("SAURRON_VERSION");
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let args = cli::Args::parse();
 
     // Phase 1: minimal tracing init (pretty format, level from CLI/env, default INFO).
@@ -36,6 +38,10 @@ fn main() -> anyhow::Result<()> {
         monitor_only = config.monitor_only,
         "Saurron starting"
     );
+
+    let docker = docker::DockerClient::connect(&config.docker)?;
+    docker.ping().await?;
+    info!("Connected to Docker daemon");
 
     Ok(())
 }

@@ -252,9 +252,7 @@ impl Config {
         let on_timeout = if args.no_rollback_on_timeout {
             false
         } else {
-            args.rollback_on_timeout
-                .or(pr.on_timeout)
-                .unwrap_or(true)
+            args.rollback_on_timeout.or(pr.on_timeout).unwrap_or(true)
         };
 
         // Webhook: only present if url is configured
@@ -524,7 +522,6 @@ fn resolve_secret_file(value: &str) -> Result<String> {
         Ok(value.to_string())
     }
 }
-
 
 #[cfg(test)]
 mod tests {

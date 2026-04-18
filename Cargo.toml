@@ -7,7 +7,7 @@ build = "build.rs"
 [dependencies]
 anyhow = "1"
 axum = "0.7"
-bollard = "0.17"
+bollard = { version = "0.17", features = ["ssl"] }
 clap = { version = "4", features = ["derive", "env"] }
 config = { version = "0.14", default-features = false, features = ["toml"] }
 lettre = { version = "0.11", default-features = false }
