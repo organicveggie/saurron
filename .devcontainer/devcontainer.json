@@ -1,0 +1,38 @@
+{
+    "name": "Rust",
+    "image": "mcr.microsoft.com/devcontainers/rust:latest",
+    // Configure tool-specific properties.
+    "customizations": {
+        // Configure properties specific to VS Code.
+        "vscode": {
+            // Add the IDs of extensions you want installed when the container is created.
+            "extensions": [
+                "anthropic.claude-code",
+                "ms-azuretools.vscode-docker",
+                "rust-lang.rust-analyzer",
+                "tamasfe.even-better-toml"
+            ]
+        }
+    },
+    // Features to add to the dev container. More info: https://containers.dev/features.
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {},
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+            "version": "latest",
+            "enableNonRootDocker": "true",
+            "moby": false
+        }
+    },
+    // Use 'mounts' to make the cargo cache persistent in a Docker Volume.
+    "mounts": [
+        {
+            "source": "devcontainer-cargo-cache-${devcontainerId}",
+            "target": "/usr/local/cargo",
+            "type": "volume"
+        }
+    ],
+    // Use 'postCreateCommand' to run commands after the container is created.
+    "postCreateCommand": "rustc --version",
+    // Use 'postStartCommand' to run commands every time the container is started.
+    "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}"
+}
