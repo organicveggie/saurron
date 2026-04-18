@@ -85,7 +85,19 @@
 
 ## Phase 3 — Structured logging & audit trail
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `Cargo.toml` — added `tracing-appender = "0.2"` and `tracing-logfmt = "0.3"`; added `"json"` feature to `tracing-subscriber`
+- `src/audit.rs` (new) — `audit_update()` and `audit_rollback()` functions emit structured events with `target: "saurron::audit"`; all fields match the audit trail spec (container name/id, old/new image tag+digest, outcome, failure reason); call sites in Phases 5 and 6
+- `src/main.rs` — reordered init to `parse args → load config → init tracing` so TOML log settings apply from the first log line; replaced Phase 1 stub with `init_tracing()` supporting all four formats: `pretty` (colored human-readable), `json` (newline-delimited JSON), `logfmt` (key=value pairs), `auto` (pretty on TTY, logfmt when piped); boxed layers collected into `Vec` and added via single `.with()` to satisfy tracing-subscriber's type constraints; `EnvFilter` wraps outer layer so `RUST_LOG` env var overrides config-derived level; optional audit file layer wired with `tracing_appender::rolling::never()` + `non_blocking()`, filtered to `saurron::audit` target only; `WorkerGuard` held in `_guard` for full program lifetime to ensure flush on exit; parent directory created with `create_dir_all` if absent
+
+**Milestone verification:** JSON logs flow to stdout with `--log-format json`; logfmt format on non-TTY with `--log-format auto`; audit events flow to configured file when `--audit-log` is set.
+
+**Notes:**
+- `audit_update()` and `audit_rollback()` are defined but have no call sites yet; call sites added in Phases 5 and 6 respectively
+- `tracing_logfmt::layer()` returns `tracing_subscriber::fmt::Layer` (writes to stdout by default); `BoxLayer` type alias is `Box<dyn Layer<Registry> + Send + Sync>`
 
 ---
 
