@@ -1,0 +1,43 @@
+name: Rust
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BUILD_TARGET: release
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        # Define a map for each platform and its corresponding runner
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64/v8
+            runner: ubuntu-24.04-arm
+
+    # Reference the runner defined in the matrix
+    runs-on: ${{ matrix.runner }}
+
+    outputs:
+      release_built: ${{ steps.set-output.outputs.release_built }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build binaries in "${{ env.RUST_BUILD_TARGET }}" mode
+        run: cargo build --profile ${{ env.RUST_BUILD_TARGET }}
+      - name: Set Output
+        id: set-output
+        run: echo "release_built=true" >> $GITHUB_OUTPUT
+      - name: Run tests in "${{ env.RUST_BUILD_TARGET }}" mode
+        run: cargo test --profile ${{ env.RUST_BUILD_TARGET }}
