@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src=“./logo.png” width=“450” />
+<img src="./logo.png" width="450" />
 
 # Saurron
 
