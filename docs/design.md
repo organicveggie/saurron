@@ -228,11 +228,11 @@ If new container doesn't reach healthy running state:
 
 **Failure conditions** — user-configurable; any combination can be enabled:
 
-| Condition | Description | Default |
-|-----------|-------------|---------|
-| `non-zero-exit` | Container exits with non-zero code immediately after start | Enabled |
+| Condition             | Description                                                      | Default |
+| --------------------- | ---------------------------------------------------------------- | ------- |
+| `non-zero-exit`       | Container exits with non-zero code immediately after start       | Enabled |
 | `healthcheck-failure` | Docker healthcheck reports unhealthy within configurable timeout | Enabled |
-| `startup-timeout` | Container doesn't reach `running` state within N seconds | Enabled |
+| `startup-timeout`     | Container doesn't reach `running` state within N seconds         | Enabled |
 
 Timeout for `healthcheck-failure` and `startup-timeout` configurable (default: 30 seconds).
 
@@ -282,12 +282,12 @@ Suppressed if cycle produced no updates, no stale detections, no failures.
 
 #### Supported Targets
 
-| Target | Transport | Notes |
-|--------|-----------|-------|
-| Webhook | HTTP POST | Generic JSON payload; configurable URL and headers |
-| Email | SMTP | STARTTLS by default; configurable server, port, credentials |
-| MQTT | TCP/TLS | Configurable broker URL, topic, QoS, and credentials |
-| Pushover| TCP | Real-time notifications on Android, iPhone, iPad, and Desktop |
+| Target   | Transport | Notes                                                         |
+| -------- | --------- | ------------------------------------------------------------- |
+| Webhook  | HTTP POST | Generic JSON payload; configurable URL and headers            |
+| Email    | SMTP      | STARTTLS by default; configurable server, port, credentials   |
+| MQTT     | TCP/TLS   | Configurable broker URL, topic, QoS, and credentials          |
+| Pushover | TCP       | Real-time notifications on Android, iPhone, iPad, and Desktop |
 
 Multiple targets can be active simultaneously.
 
@@ -316,12 +316,12 @@ Multiple targets can be active simultaneously.
 
 `outcome` values:
 
-| Value | Description |
-|-------|-------------|
-| `updated` | Image pulled, container restarted successfully |
-| `stale_detected` | Update detected in monitor-only mode; no restart |
-| `rolled_back` | Container started but failed health checks; previous image restored |
-| `failed` | Update attempted but failed; rollback not possible |
+| Value            | Description                                                         |
+| ---------------- | ------------------------------------------------------------------- |
+| `updated`        | Image pulled, container restarted successfully                      |
+| `stale_detected` | Update detected in monitor-only mode; no restart                    |
+| `rolled_back`    | Container started but failed health checks; previous image restored |
+| `failed`         | Update attempted but failed; rollback not possible                  |
 
 `old_image` and `new_image` are fully-qualified in `name:tag@sha256:digest` form. For `stale_detected`, `new_image` = digest currently resolved by registry; no pull occurred. For `failed` where failure happened before pull completed, `new_image` may be `null`.
 
@@ -376,10 +376,10 @@ Only running containers are candidates by default. Stopped and restarting contai
 
 ### Inclusion Flags
 
-| Flag                   | Description                              |
-| ---------------------- | ---------------------------------------- |
+| Flag                   | Description                                                     |
+| ---------------------- | --------------------------------------------------------------- |
 | `--revive-stopped`     | Treat containers in `created` or `exited` state same as running |
-| `--include-restarting` | Include containers in `restarting` state |
+| `--include-restarting` | Include containers in `restarting` state                        |
 
 ### Opt-Out (Default Mode)
 
@@ -397,16 +397,16 @@ Only containers with `saurron.enable=true` included. All others ignored.
 
 ### Per-Container Configuration Labels
 
-| Label | Values | Description |
-|-------|--------|-------------|
-| `saurron.enable` | `true` / `false` | Include or exclude (or mark opt-in when `--label-enable` active) |
-| `saurron.monitor-only` | `true` / `false` | Detect + notify; do not restart |
-| `saurron.no-pull` | `true` / `false` | Restart from cached image without pulling |
-| `saurron.stop-signal` | signal name (e.g., `SIGHUP`) | Override stop signal |
-| `saurron.depends-on` | comma-separated container names | Explicit dependencies beyond Docker `--link` and `network_mode: container:` |
-| `saurron.non-semver-strategy` | `skip` / `digest` | Override non-semver tag strategy. Default `digest`; `skip` disables update checks for this container's non-semver tag |
-| `saurron.semver-pre-release` | `true` / `false` | Include pre-release versions when selecting latest semver tag. No effect on non-semver. Default: `false` |
-| `saurron.stop-timeout` | duration (e.g., `30s`) | Override graceful stop timeout |
+| Label                         | Values                          | Description                                                                                                           |
+| ----------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `saurron.enable`              | `true` / `false`                | Include or exclude (or mark opt-in when `--label-enable` active)                                                      |
+| `saurron.monitor-only`        | `true` / `false`                | Detect + notify; do not restart                                                                                       |
+| `saurron.no-pull`             | `true` / `false`                | Restart from cached image without pulling                                                                             |
+| `saurron.stop-signal`         | signal name (e.g., `SIGHUP`)    | Override stop signal                                                                                                  |
+| `saurron.depends-on`          | comma-separated container names | Explicit dependencies beyond Docker `--link` and `network_mode: container:`                                           |
+| `saurron.non-semver-strategy` | `skip` / `digest`               | Override non-semver tag strategy. Default `digest`; `skip` disables update checks for this container's non-semver tag |
+| `saurron.semver-pre-release`  | `true` / `false`                | Include pre-release versions when selecting latest semver tag. No effect on non-semver. Default: `false`              |
+| `saurron.stop-timeout`        | duration (e.g., `30s`)          | Override graceful stop timeout                                                                                        |
 
 ### Label Precedence
 
@@ -425,10 +425,12 @@ Server starts on configurable port (default: `8080`) when any API feature enable
 Trigger immediate update check.
 
 **Query parameters (optional):**
+
 - `?image=myorg/myapp` — restrict to containers using this image (comma-separated)
 - `?container=mycontainer` — restrict to specific container by name (comma-separated)
 
 **Response:**
+
 ```json
 {
   "status": "triggered",
@@ -450,13 +452,13 @@ Prometheus metrics in standard text exposition format.
 
 Tracked metrics:
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `saurron_scans_total` | Counter | Total update cycles run |
-| `saurron_scans_skipped` | Counter | Cycles skipped due to concurrent update |
-| `saurron_containers_scanned` | Gauge | Containers checked in last cycle |
-| `saurron_containers_updated` | Gauge | Containers updated in last cycle |
-| `saurron_containers_failed` | Gauge | Containers that failed to update in last cycle |
+| Metric                       | Type    | Description                                    |
+| ---------------------------- | ------- | ---------------------------------------------- |
+| `saurron_scans_total`        | Counter | Total update cycles run                        |
+| `saurron_scans_skipped`      | Counter | Cycles skipped due to concurrent update        |
+| `saurron_containers_scanned` | Gauge   | Containers checked in last cycle               |
+| `saurron_containers_updated` | Gauge   | Containers updated in last cycle               |
+| `saurron_containers_failed`  | Gauge   | Containers that failed to update in last cycle |
 
 ### `GET /v1/health`
 
@@ -491,23 +493,23 @@ End-to-end in top-level `tests/` directory; run against real Docker daemon via `
 
 ## 10. Technology Stack
 
-| Concern | Choice | Rationale |
-|---------|--------|-----------|
-| Language | Rust (stable) | Memory safety, performance, strong async ecosystem |
-| Async runtime | Tokio | De-facto standard; excellent ecosystem support |
-| Config | `config-rs` + `clap` | Layered config (file + env + CLI) |
-| Docker API | `bollard` | Leading async Rust Docker client; actively maintained, hyper 1.x, full API coverage |
-| Email | `lettre` | Pure Rust SMTP client with STARTTLS support |
-| Error handling | `thiserror` + `anyhow` | `thiserror` for domain error types in core modules; `anyhow` in `main` and top-level orchestration |
-| HTTP client (registry) | `reqwest` | Tokio-native, widely used |
-| HTTP server (webhook + API) | `axum` | Tokio-native, ergonomic, well-maintained |
-| Logging | `tracing` + `tracing-subscriber` | Structured, async-aware logging |
-| MQTT | `rumqttc` | Async Rust MQTT client |
-| Notification templates | `minijinja` | Runtime Jinja2-style templating; single required dependency (`serde`) |
-| Prometheus metrics | `prometheus` | Standard Rust Prometheus client |
-| Serialization | `serde` + `serde_json` | Standard Rust serialization |
-| SemVer parsing | `semver` | Official SemVer crate from the Cargo ecosystem |
-| Unit testing (property-based) | `proptest` | Property-based tests for SemVer ranking, digest parsing, and config merging |
+| Concern                       | Choice                           | Rationale                                                                                          |
+| ----------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Language                      | Rust (stable)                    | Memory safety, performance, strong async ecosystem                                                 |
+| Async runtime                 | Tokio                            | De-facto standard; excellent ecosystem support                                                     |
+| Config                        | `config-rs` + `clap`             | Layered config (file + env + CLI)                                                                  |
+| Docker API                    | `bollard`                        | Leading async Rust Docker client; actively maintained, hyper 1.x, full API coverage                |
+| Email                         | `lettre`                         | Pure Rust SMTP client with STARTTLS support                                                        |
+| Error handling                | `thiserror` + `anyhow`           | `thiserror` for domain error types in core modules; `anyhow` in `main` and top-level orchestration |
+| HTTP client (registry)        | `reqwest`                        | Tokio-native, widely used                                                                          |
+| HTTP server (webhook + API)   | `axum`                           | Tokio-native, ergonomic, well-maintained                                                           |
+| Logging                       | `tracing` + `tracing-subscriber` | Structured, async-aware logging                                                                    |
+| MQTT                          | `rumqttc`                        | Async Rust MQTT client                                                                             |
+| Notification templates        | `minijinja`                      | Runtime Jinja2-style templating; single required dependency (`serde`)                              |
+| Prometheus metrics            | `prometheus`                     | Standard Rust Prometheus client                                                                    |
+| Serialization                 | `serde` + `serde_json`           | Standard Rust serialization                                                                        |
+| SemVer parsing                | `semver`                         | Official SemVer crate from the Cargo ecosystem                                                     |
+| Unit testing (property-based) | `proptest`                       | Property-based tests for SemVer ranking, digest parsing, and config merging                        |
 
 ---
 
@@ -517,33 +519,33 @@ End-to-end in top-level `tests/` directory; run against real Docker daemon via `
 
 ### 11.1 General
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Path to TOML config file | `--config <path>` | `SAURRON_CONFIG` | *(not applicable)* |
-| Log level (`trace`, `debug`, `info`, `warn`, `error`). Default: `info` | `--log-level <level>` | `SAURRON_LOG_LEVEL` | `log_level` |
-| Log format (`auto`, `json`, `logfmt`, `pretty`). Default: `auto` | `--log-format <format>` | `SAURRON_LOG_FORMAT` | `log_format` |
-| Shorthand for `--log-level debug` | `--debug` | — | — |
-| Shorthand for `--log-level trace` | `--trace` | — | — |
-| Path to append-only audit log file | `--audit-log <path>` | `SAURRON_AUDIT_LOG` | `audit_log` |
+| Purpose                                                                | CLI Flag                | Environment Variable | TOML Key           |
+| ---------------------------------------------------------------------- | ----------------------- | -------------------- | ------------------ |
+| Path to TOML config file                                               | `--config <path>`       | `SAURRON_CONFIG`     | _(not applicable)_ |
+| Log level (`trace`, `debug`, `info`, `warn`, `error`). Default: `info` | `--log-level <level>`   | `SAURRON_LOG_LEVEL`  | `log_level`        |
+| Log format (`auto`, `json`, `logfmt`, `pretty`). Default: `auto`       | `--log-format <format>` | `SAURRON_LOG_FORMAT` | `log_format`       |
+| Shorthand for `--log-level debug`                                      | `--debug`               | —                    | —                  |
+| Shorthand for `--log-level trace`                                      | `--trace`               | —                    | —                  |
+| Path to append-only audit log file                                     | `--audit-log <path>`    | `SAURRON_AUDIT_LOG`  | `audit_log`        |
 
 ### 11.2 Docker Connection
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Docker daemon socket or host URL. Default: `unix:///var/run/docker.sock` | `--host <uri>` | `DOCKER_HOST` | `docker.host` |
-| Enable TLS for Docker daemon connection | `--tlsverify` | `DOCKER_TLS_VERIFY` | `docker.tls_verify` |
-| Path to TLS CA certificate | `--tls-ca-cert <path>` | `DOCKER_CERT_PATH` | `docker.tls_ca_cert` |
-| Path to TLS client certificate | `--tls-cert <path>` | — | `docker.tls_cert` |
-| Path to TLS client key | `--tls-key <path>` | — | `docker.tls_key` |
-| Docker API version to negotiate. Default: auto-negotiate | `--api-version <version>` | `DOCKER_API_VERSION` | `docker.api_version` |
+| Purpose                                                                  | CLI Flag                  | Environment Variable | TOML Key             |
+| ------------------------------------------------------------------------ | ------------------------- | -------------------- | -------------------- |
+| Docker daemon socket or host URL. Default: `unix:///var/run/docker.sock` | `--host <uri>`            | `DOCKER_HOST`        | `docker.host`        |
+| Enable TLS for Docker daemon connection                                  | `--tlsverify`             | `DOCKER_TLS_VERIFY`  | `docker.tls_verify`  |
+| Path to TLS CA certificate                                               | `--tls-ca-cert <path>`    | `DOCKER_CERT_PATH`   | `docker.tls_ca_cert` |
+| Path to TLS client certificate                                           | `--tls-cert <path>`       | —                    | `docker.tls_cert`    |
+| Path to TLS client key                                                   | `--tls-key <path>`        | —                    | `docker.tls_key`     |
+| Docker API version to negotiate. Default: auto-negotiate                 | `--api-version <version>` | `DOCKER_API_VERSION` | `docker.api_version` |
 
 ### 11.3 Scheduling
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
+| Purpose                                                                                                                          | CLI Flag                | Environment Variable    | TOML Key        |
+| -------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ----------------------- | --------------- |
 | Poll interval as duration (e.g., `5m`, `1h`). Converted to cron internally. Mutually exclusive with `--schedule`. Default: `24h` | `--interval <duration>` | `SAURRON_POLL_INTERVAL` | `poll_interval` |
-| Poll schedule as cron expression (e.g., `0 4 * * *`). Mutually exclusive with `--interval` | `--schedule <cron>` | `SAURRON_SCHEDULE` | `schedule` |
-| Single update cycle then exit. Mutually exclusive with `--interval` and `--schedule` | `--run-once` | `SAURRON_RUN_ONCE` | `run_once` |
+| Poll schedule as cron expression (e.g., `0 4 * * *`). Mutually exclusive with `--interval`                                       | `--schedule <cron>`     | `SAURRON_SCHEDULE`      | `schedule`      |
+| Single update cycle then exit. Mutually exclusive with `--interval` and `--schedule`                                             | `--run-once`            | `SAURRON_RUN_ONCE`      | `run_once`      |
 
 ### 11.4 Container Selection
 
@@ -556,83 +558,83 @@ End-to-end in top-level `tests/` directory; run against real Docker daemon via `
 
 ### 11.5 Update Strategy
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Detect + notify; no pull or restart | `--monitor-only` | `SAURRON_MONITOR_ONLY` | `monitor_only` |
-| Restart using cached image without pulling | `--no-pull` | `SAURRON_NO_PULL` | `no_pull` |
-| Remove old images after successful update | `--cleanup` | `SAURRON_CLEANUP` | `cleanup` |
-| Start stopped containers after image update | `--revive-stopped` | `SAURRON_REVIVE_STOPPED` | `revive_stopped` |
-| Wait time for graceful stop before SIGKILL. Default: `10s` | `--stop-timeout <duration>` | `SAURRON_STOP_TIMEOUT` | `stop_timeout` |
+| Purpose                                                    | CLI Flag                    | Environment Variable     | TOML Key         |
+| ---------------------------------------------------------- | --------------------------- | ------------------------ | ---------------- |
+| Detect + notify; no pull or restart                        | `--monitor-only`            | `SAURRON_MONITOR_ONLY`   | `monitor_only`   |
+| Restart using cached image without pulling                 | `--no-pull`                 | `SAURRON_NO_PULL`        | `no_pull`        |
+| Remove old images after successful update                  | `--cleanup`                 | `SAURRON_CLEANUP`        | `cleanup`        |
+| Start stopped containers after image update                | `--revive-stopped`          | `SAURRON_REVIVE_STOPPED` | `revive_stopped` |
+| Wait time for graceful stop before SIGKILL. Default: `10s` | `--stop-timeout <duration>` | `SAURRON_STOP_TIMEOUT`   | `stop_timeout`   |
 
 ### 11.6 Rollback
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Rollback if new container exits non-zero. Default: enabled | `--rollback-on-exit-code` / `--no-rollback-on-exit-code` | `SAURRON_ROLLBACK_ON_EXIT_CODE` | `rollback.on_exit_code` |
-| Rollback if Docker healthcheck reports unhealthy within startup timeout. Default: enabled | `--rollback-on-healthcheck` / `--no-rollback-on-healthcheck` | `SAURRON_ROLLBACK_ON_HEALTHCHECK` | `rollback.on_healthcheck` |
-| Rollback if container doesn't reach `running` within startup timeout. Default: enabled | `--rollback-on-timeout` / `--no-rollback-on-timeout` | `SAURRON_ROLLBACK_ON_TIMEOUT` | `rollback.on_timeout` |
-| Wait time before triggering rollback. Default: `30s` | `--startup-timeout <duration>` | `SAURRON_STARTUP_TIMEOUT` | `rollback.startup_timeout` |
+| Purpose                                                                                   | CLI Flag                                                     | Environment Variable              | TOML Key                   |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------ | --------------------------------- | -------------------------- |
+| Rollback if new container exits non-zero. Default: enabled                                | `--rollback-on-exit-code` / `--no-rollback-on-exit-code`     | `SAURRON_ROLLBACK_ON_EXIT_CODE`   | `rollback.on_exit_code`    |
+| Rollback if Docker healthcheck reports unhealthy within startup timeout. Default: enabled | `--rollback-on-healthcheck` / `--no-rollback-on-healthcheck` | `SAURRON_ROLLBACK_ON_HEALTHCHECK` | `rollback.on_healthcheck`  |
+| Rollback if container doesn't reach `running` within startup timeout. Default: enabled    | `--rollback-on-timeout` / `--no-rollback-on-timeout`         | `SAURRON_ROLLBACK_ON_TIMEOUT`     | `rollback.on_timeout`      |
+| Wait time before triggering rollback. Default: `30s`                                      | `--startup-timeout <duration>`                               | `SAURRON_STARTUP_TIMEOUT`         | `rollback.startup_timeout` |
 
 ### 11.7 Registry
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
+| Purpose                                                                                                                | CLI Flag                          | Environment Variable         | TOML Key             |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------- | -------------------- |
 | Warning behaviour for failed HEAD requests: `auto` (default — warn only for Docker Hub and ghcr.io), `always`, `never` | `--head-warn-strategy <strategy>` | `SAURRON_HEAD_WARN_STRATEGY` | `head_warn_strategy` |
 
 ### 11.8 HTTP API
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Enable `POST /v1/update` | `--http-api-update` | `SAURRON_HTTP_API_UPDATE` | `http_api.update` |
-| Enable `GET /v1/metrics` | `--http-api-metrics` | `SAURRON_HTTP_API_METRICS` | `http_api.metrics` |
-| Bearer token for all API requests | `--http-api-token <token>` | `SAURRON_HTTP_API_TOKEN` | `http_api.token` |
-| HTTP API server port. Default: `8080` | `--http-api-port <port>` | `SAURRON_HTTP_API_PORT` | `http_api.port` |
+| Purpose                                                        | CLI Flag                     | Environment Variable               | TOML Key                   |
+| -------------------------------------------------------------- | ---------------------------- | ---------------------------------- | -------------------------- |
+| Enable `POST /v1/update`                                       | `--http-api-update`          | `SAURRON_HTTP_API_UPDATE`          | `http_api.update`          |
+| Enable `GET /v1/metrics`                                       | `--http-api-metrics`         | `SAURRON_HTTP_API_METRICS`         | `http_api.metrics`         |
+| Bearer token for all API requests                              | `--http-api-token <token>`   | `SAURRON_HTTP_API_TOKEN`           | `http_api.token`           |
+| HTTP API server port. Default: `8080`                          | `--http-api-port <port>`     | `SAURRON_HTTP_API_PORT`            | `http_api.port`            |
 | Serve `GET /v1/metrics` without Bearer token. Default: `false` | `--http-api-metrics-no-auth` | `SAURRON_HTTP_API_METRICS_NO_AUTH` | `http_api.metrics_no_auth` |
 
 ### 11.9 Notifications — General
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Delay between cycle completion and notification dispatch (e.g., `30s`). Default: `0s` | `--notification-delay <duration>` | `SAURRON_NOTIFICATION_DELAY` | `notifications.general.delay` |
-| Custom notification template string; uses built-in default when omitted | `--notification-template <template>` | `SAURRON_NOTIFICATION_TEMPLATE` | `notifications.general.template` |
+| Purpose                                                                               | CLI Flag                             | Environment Variable            | TOML Key                         |
+| ------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------- | -------------------------------- |
+| Delay between cycle completion and notification dispatch (e.g., `30s`). Default: `0s` | `--notification-delay <duration>`    | `SAURRON_NOTIFICATION_DELAY`    | `notifications.general.delay`    |
+| Custom notification template string; uses built-in default when omitted               | `--notification-template <template>` | `SAURRON_NOTIFICATION_TEMPLATE` | `notifications.general.template` |
 
 ### 11.10 Notifications — Webhook
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| URL to POST notification payloads to | `--webhook-url <url>` | `SAURRON_WEBHOOK_URL` | `notifications.webhook.url` |
-| Additional HTTP headers as comma-separated `Key:Value` pairs | `--webhook-headers <headers>` | `SAURRON_WEBHOOK_HEADERS` | `notifications.webhook.headers` |
-| Skip TLS cert verification. Default: `false` — invalid cert logs error and skips webhook | `--webhook-tls-skip-verify` | `SAURRON_WEBHOOK_TLS_SKIP_VERIFY` | `notifications.webhook.tls_skip_verify` |
+| Purpose                                                                                  | CLI Flag                      | Environment Variable              | TOML Key                                |
+| ---------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------- | --------------------------------------- |
+| URL to POST notification payloads to                                                     | `--webhook-url <url>`         | `SAURRON_WEBHOOK_URL`             | `notifications.webhook.url`             |
+| Additional HTTP headers as comma-separated `Key:Value` pairs                             | `--webhook-headers <headers>` | `SAURRON_WEBHOOK_HEADERS`         | `notifications.webhook.headers`         |
+| Skip TLS cert verification. Default: `false` — invalid cert logs error and skips webhook | `--webhook-tls-skip-verify`   | `SAURRON_WEBHOOK_TLS_SKIP_VERIFY` | `notifications.webhook.tls_skip_verify` |
 
 ### 11.11 Notifications — Email
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Sender address | `--notification-email-from <address>` | `SAURRON_NOTIFICATION_EMAIL_FROM` | `notifications.email.from` |
-| Recipient address(es), comma-separated | `--notification-email-to <addresses>` | `SAURRON_NOTIFICATION_EMAIL_TO` | `notifications.email.to` |
-| SMTP server hostname | `--notification-email-server <host>` | `SAURRON_NOTIFICATION_EMAIL_SERVER` | `notifications.email.server` |
-| SMTP server port. Default: `587` | `--notification-email-port <port>` | `SAURRON_NOTIFICATION_EMAIL_PORT` | `notifications.email.port` |
-| SMTP auth username | `--notification-email-user <user>` | `SAURRON_NOTIFICATION_EMAIL_USER` | `notifications.email.user` |
-| SMTP auth password | `--notification-email-password <password>` | `SAURRON_NOTIFICATION_EMAIL_PASSWORD` | `notifications.email.password` |
-| Skip TLS cert verification for SMTP | `--notification-email-tls-skip-verify` | `SAURRON_NOTIFICATION_EMAIL_TLS_SKIP_VERIFY` | `notifications.email.tls_skip_verify` |
+| Purpose                                | CLI Flag                                   | Environment Variable                         | TOML Key                              |
+| -------------------------------------- | ------------------------------------------ | -------------------------------------------- | ------------------------------------- |
+| Sender address                         | `--notification-email-from <address>`      | `SAURRON_NOTIFICATION_EMAIL_FROM`            | `notifications.email.from`            |
+| Recipient address(es), comma-separated | `--notification-email-to <addresses>`      | `SAURRON_NOTIFICATION_EMAIL_TO`              | `notifications.email.to`              |
+| SMTP server hostname                   | `--notification-email-server <host>`       | `SAURRON_NOTIFICATION_EMAIL_SERVER`          | `notifications.email.server`          |
+| SMTP server port. Default: `587`       | `--notification-email-port <port>`         | `SAURRON_NOTIFICATION_EMAIL_PORT`            | `notifications.email.port`            |
+| SMTP auth username                     | `--notification-email-user <user>`         | `SAURRON_NOTIFICATION_EMAIL_USER`            | `notifications.email.user`            |
+| SMTP auth password                     | `--notification-email-password <password>` | `SAURRON_NOTIFICATION_EMAIL_PASSWORD`        | `notifications.email.password`        |
+| Skip TLS cert verification for SMTP    | `--notification-email-tls-skip-verify`     | `SAURRON_NOTIFICATION_EMAIL_TLS_SKIP_VERIFY` | `notifications.email.tls_skip_verify` |
 
 ### 11.12 Notifications — MQTT
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| MQTT broker URL (e.g., `tcp://broker.example.com:1883` or `ssl://broker.example.com:8883`) | `--notification-mqtt-broker <url>` | `SAURRON_NOTIFICATION_MQTT_BROKER` | `notifications.mqtt.broker` |
-| MQTT topic for notifications | `--notification-mqtt-topic <topic>` | `SAURRON_NOTIFICATION_MQTT_TOPIC` | `notifications.mqtt.topic` |
-| MQTT QoS: `0` (at most once), `1` (at least once), `2` (exactly once). Default: `0` | `--notification-mqtt-qos <level>` | `SAURRON_NOTIFICATION_MQTT_QOS` | `notifications.mqtt.qos` |
-| MQTT client ID; auto-generated if omitted | `--notification-mqtt-client-id <id>` | `SAURRON_NOTIFICATION_MQTT_CLIENT_ID` | `notifications.mqtt.client_id` |
-| MQTT broker auth username | `--notification-mqtt-username <user>` | `SAURRON_NOTIFICATION_MQTT_USERNAME` | `notifications.mqtt.username` |
-| MQTT broker auth password | `--notification-mqtt-password <password>` | `SAURRON_NOTIFICATION_MQTT_PASSWORD` | `notifications.mqtt.password` |
+| Purpose                                                                                    | CLI Flag                                  | Environment Variable                  | TOML Key                       |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------- | ------------------------------------- | ------------------------------ |
+| MQTT broker URL (e.g., `tcp://broker.example.com:1883` or `ssl://broker.example.com:8883`) | `--notification-mqtt-broker <url>`        | `SAURRON_NOTIFICATION_MQTT_BROKER`    | `notifications.mqtt.broker`    |
+| MQTT topic for notifications                                                               | `--notification-mqtt-topic <topic>`       | `SAURRON_NOTIFICATION_MQTT_TOPIC`     | `notifications.mqtt.topic`     |
+| MQTT QoS: `0` (at most once), `1` (at least once), `2` (exactly once). Default: `0`        | `--notification-mqtt-qos <level>`         | `SAURRON_NOTIFICATION_MQTT_QOS`       | `notifications.mqtt.qos`       |
+| MQTT client ID; auto-generated if omitted                                                  | `--notification-mqtt-client-id <id>`      | `SAURRON_NOTIFICATION_MQTT_CLIENT_ID` | `notifications.mqtt.client_id` |
+| MQTT broker auth username                                                                  | `--notification-mqtt-username <user>`     | `SAURRON_NOTIFICATION_MQTT_USERNAME`  | `notifications.mqtt.username`  |
+| MQTT broker auth password                                                                  | `--notification-mqtt-password <password>` | `SAURRON_NOTIFICATION_MQTT_PASSWORD`  | `notifications.mqtt.password`  |
 
 ### 11.13 Notifications — Pushover
 
-| Purpose | CLI Flag | Environment Variable | TOML Key |
-|---------|----------|----------------------|----------|
-| Pushover application API token | `--notification-pushover-token <token>` | `SAURRON_NOTIFICATION_PUSHOVER_TOKEN` | `notifications.pushover.token` |
-| Pushover user or group key | `--notification-pushover-user-key <key>` | `SAURRON_NOTIFICATION_PUSHOVER_USER_KEY` | `notifications.pushover.user_key` |
+| Purpose                        | CLI Flag                                 | Environment Variable                     | TOML Key                          |
+| ------------------------------ | ---------------------------------------- | ---------------------------------------- | --------------------------------- |
+| Pushover application API token | `--notification-pushover-token <token>`  | `SAURRON_NOTIFICATION_PUSHOVER_TOKEN`    | `notifications.pushover.token`    |
+| Pushover user or group key     | `--notification-pushover-user-key <key>` | `SAURRON_NOTIFICATION_PUSHOVER_USER_KEY` | `notifications.pushover.user_key` |
 
 ---
 
@@ -640,23 +642,23 @@ End-to-end in top-level `tests/` directory; run against real Docker daemon via `
 
 Deferred from initial release:
 
-| Feature | Notes |
-|---------|-------|
-| Docker Swarm support | Multi-host orchestration |
-| Kubernetes support | Controller/operator model |
-| Private registry authentication | Docker config file + env var credential sources |
-| Dependent container restarts | Restart containers sharing networks or volumes with updated container |
-| Slack notifications | |
-| Microsoft Teams notifications | |
-| Gotify notifications | |
-| Discord notifications | |
-| Docker Hub inbound webhook format | Parse Docker Hub-specific webhook payloads |
-| Web UI | Dashboard for update history and manual triggers |
-| Lifecycle hooks | Pre/post-check and pre/post-update shell commands inside containers; `EX_TEMPFAIL` exit code to signal skip-without-failure |
-| Notification template preview | Validate custom templates against synthetic data without real update cycle |
-| Scope-based multi-instance support | Multiple instances on same host managing non-overlapping container sets via scope label |
-| Multiple instance detection | Detect duplicate instances sharing same scope; stop all but most recently created |
+| Feature                            | Notes                                                                                                                       |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Docker Swarm support               | Multi-host orchestration                                                                                                    |
+| Kubernetes support                 | Controller/operator model                                                                                                   |
+| Private registry authentication    | Docker config file + env var credential sources                                                                             |
+| Dependent container restarts       | Restart containers sharing networks or volumes with updated container                                                       |
+| Slack notifications                |                                                                                                                             |
+| Microsoft Teams notifications      |                                                                                                                             |
+| Gotify notifications               |                                                                                                                             |
+| Discord notifications              |                                                                                                                             |
+| Docker Hub inbound webhook format  | Parse Docker Hub-specific webhook payloads                                                                                  |
+| Web UI                             | Dashboard for update history and manual triggers                                                                            |
+| Lifecycle hooks                    | Pre/post-check and pre/post-update shell commands inside containers; `EX_TEMPFAIL` exit code to signal skip-without-failure |
+| Notification template preview      | Validate custom templates against synthetic data without real update cycle                                                  |
+| Scope-based multi-instance support | Multiple instances on same host managing non-overlapping container sets via scope label                                     |
+| Multiple instance detection        | Detect duplicate instances sharing same scope; stop all but most recently created                                           |
 
 ---
 
-*Document status: Draft*
+_Document status: Draft_
