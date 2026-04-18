@@ -43,5 +43,23 @@ async fn main() -> anyhow::Result<()> {
     docker.ping().await?;
     info!("Connected to Docker daemon");
 
+    let selector = docker::ContainerSelector::new(
+        config.label_enable,
+        config.global_takes_precedence,
+        &config.disable_containers,
+        config.include_restarting,
+        config.revive_stopped,
+    );
+    let all_containers = docker.list_containers(&selector).await?;
+    let selected = docker.select_containers(&all_containers, &selector);
+    info!(
+        total = all_containers.len(),
+        selected = selected.len(),
+        "Container enumeration complete"
+    );
+    for c in &selected {
+        info!(id = %c.id, name = %c.name, image = %c.image, state = %c.state, "Container selected");
+    }
+
     Ok(())
 }
