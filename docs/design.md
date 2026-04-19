@@ -38,7 +38,7 @@ Runs as Docker container. Mounts Docker socket to talk to daemon.
 Deferred to future releases:
 
 - Docker Swarm and Kubernetes support
-- Private registry authentication
+- Per-registry credential scoping (separate username/password per registry)
 - Dependent container restarts
 - Notification targets beyond webhook/email/MQTT (Slack, Teams, Gotify, Discord)
 - Docker Hub-specific inbound webhook format
@@ -99,6 +99,7 @@ If value is path to readable file, transparently replaced with file contents at 
 
 Values supporting substitution:
 
+- `registry_password`
 - `http_api.token`
 - `notifications.general.template`
 - `notifications.webhook.url`
@@ -139,8 +140,8 @@ Values supporting substitution:
   - Registry returns empty manifest list
   - Manifest list has no entry for container's target architecture
   - Registry returns malformed/unexpected response (treated as registry bug or transient error)
-- Only public registries supported in initial release
 - Sends `User-Agent: saurron/<version>` on all outbound registry requests
+- **Authentication** — optional global username/password (`--registry-username` / `--registry-password`). When provided, credentials are sent as HTTP Basic Auth to the registry's token endpoint (from the `WWW-Authenticate: Bearer realm=...` challenge) to obtain a scoped Bearer token. Credentials apply to all registries; per-registry scoping is a future enhancement.
 - **HEAD request warning strategy** — configurable:
   - `auto` (default): warn only for registries known to support HEAD reliably (Docker Hub, ghcr.io); suppress for others
   - `always`: always warn on HEAD failure
@@ -577,9 +578,11 @@ End-to-end in top-level `tests/` directory; run against real Docker daemon via `
 
 ### 11.7 Registry
 
-| Purpose                                                                                                                | CLI Flag                          | Environment Variable         | TOML Key             |
-| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------- | -------------------- |
-| Warning behaviour for failed HEAD requests: `auto` (default — warn only for Docker Hub and ghcr.io), `always`, `never` | `--head-warn-strategy <strategy>` | `SAURRON_HEAD_WARN_STRATEGY` | `head_warn_strategy` |
+| Purpose                                                                                                                | CLI Flag                            | Environment Variable           | TOML Key              |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------ | --------------------- |
+| Warning behaviour for failed HEAD requests: `auto` (default — warn only for Docker Hub and ghcr.io), `always`, `never` | `--head-warn-strategy <strategy>`   | `SAURRON_HEAD_WARN_STRATEGY`   | `head_warn_strategy`  |
+| Username for registry authentication (applied to all registries)                                                       | `--registry-username <username>`    | `SAURRON_REGISTRY_USERNAME`    | `registry_username`   |
+| Password for registry authentication; supports Docker secret file path                                                 | `--registry-password <password>`    | `SAURRON_REGISTRY_PASSWORD`    | `registry_password`   |
 
 ### 11.8 HTTP API
 
@@ -646,7 +649,7 @@ Deferred from initial release:
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Docker Swarm support               | Multi-host orchestration                                                                                                    |
 | Kubernetes support                 | Controller/operator model                                                                                                   |
-| Private registry authentication    | Docker config file + env var credential sources                                                                             |
+| Per-registry credential scoping    | Separate username/password per registry; Docker config file credential source                                               |
 | Dependent container restarts       | Restart containers sharing networks or volumes with updated container                                                       |
 | Slack notifications                |                                                                                                                             |
 | Microsoft Teams notifications      |                                                                                                                             |
