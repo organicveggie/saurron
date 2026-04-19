@@ -38,7 +38,7 @@
 ### Step 3 — State filtering & selection logic
 
 - State filter: always include `running`; add `restarting` if `--include-restarting`; add `exited`/`created` if `--revive-stopped`; stopped containers excluded unless `--revive-stopped`
-- Selection logic: opt-out default (all unless `saurron.enable=false`); opt-in if `--label-enable` (only `saurron.enable=true`); `--disable-containers` exclusion list; `--global-takes-precedence` interaction
+- Selection logic: opt-out default (all unless `saurron.enable=false`); opt-in if `--label-enable` (only `saurron.enable=true`); `--disable-containers` exclusion list; `--containers` allow-list (only named containers considered; remaining filters still apply); `--global-takes-precedence` interaction
 - Unit tests with mock `ContainerInfo` vectors
 
 ### Step 4 — Enumeration & wire to main (milestone)

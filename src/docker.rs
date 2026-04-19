@@ -175,6 +175,7 @@ pub struct ContainerSelector {
     label_enable: bool,
     global_takes_precedence: bool,
     disabled_names: HashSet<String>,
+    allowed_names: Option<HashSet<String>>,
     include_restarting: bool,
     revive_stopped: bool,
 }
@@ -184,6 +185,7 @@ impl ContainerSelector {
         label_enable: bool,
         global_takes_precedence: bool,
         disable_containers: &[String],
+        containers: &[String],
         include_restarting: bool,
         revive_stopped: bool,
     ) -> Self {
@@ -191,6 +193,11 @@ impl ContainerSelector {
             label_enable,
             global_takes_precedence,
             disabled_names: disable_containers.iter().cloned().collect(),
+            allowed_names: if containers.is_empty() {
+                None
+            } else {
+                Some(containers.iter().cloned().collect())
+            },
             include_restarting,
             revive_stopped,
         }
@@ -211,6 +218,12 @@ impl ContainerSelector {
 
     /// Returns true if this container should be included in the update cycle.
     pub fn is_selected(&self, container: &ContainerInfo) -> bool {
+        if let Some(ref allowed) = self.allowed_names {
+            if !allowed.contains(&container.name) {
+                return false;
+            }
+        }
+
         if self.disabled_names.contains(&container.name) {
             return false;
         }
@@ -661,11 +674,11 @@ mod tests {
     }
 
     fn opt_out() -> ContainerSelector {
-        ContainerSelector::new(false, false, &[], false, false)
+        ContainerSelector::new(false, false, &[], &[], false, false)
     }
 
     fn opt_in() -> ContainerSelector {
-        ContainerSelector::new(true, false, &[], false, false)
+        ContainerSelector::new(true, false, &[], &[], false, false)
     }
 
     // State filter
@@ -677,19 +690,19 @@ mod tests {
 
     #[test]
     fn state_filter_include_restarting() {
-        let sel = ContainerSelector::new(false, false, &[], true, false);
+        let sel = ContainerSelector::new(false, false, &[], &[], true, false);
         assert_eq!(sel.state_filter(), vec!["running", "restarting"]);
     }
 
     #[test]
     fn state_filter_revive_stopped() {
-        let sel = ContainerSelector::new(false, false, &[], false, true);
+        let sel = ContainerSelector::new(false, false, &[], &[], false, true);
         assert_eq!(sel.state_filter(), vec!["running", "exited", "created"]);
     }
 
     #[test]
     fn state_filter_both_flags() {
-        let sel = ContainerSelector::new(false, false, &[], true, true);
+        let sel = ContainerSelector::new(false, false, &[], &[], true, true);
         assert_eq!(
             sel.state_filter(),
             vec!["running", "restarting", "exited", "created"]
@@ -734,19 +747,19 @@ mod tests {
 
     #[test]
     fn disabled_name_excluded_in_opt_out() {
-        let sel = ContainerSelector::new(false, false, &["app".to_string()], false, false);
+        let sel = ContainerSelector::new(false, false, &["app".to_string()], &[], false, false);
         assert!(!sel.is_selected(&running("app", &[("saurron.enable", "true")])));
     }
 
     #[test]
     fn disabled_name_excluded_in_opt_in() {
-        let sel = ContainerSelector::new(true, false, &["app".to_string()], false, false);
+        let sel = ContainerSelector::new(true, false, &["app".to_string()], &[], false, false);
         assert!(!sel.is_selected(&running("app", &[("saurron.enable", "true")])));
     }
 
     #[test]
     fn non_disabled_name_unaffected() {
-        let sel = ContainerSelector::new(false, false, &["other".to_string()], false, false);
+        let sel = ContainerSelector::new(false, false, &["other".to_string()], &[], false, false);
         assert!(sel.is_selected(&running("app", &[])));
     }
 
@@ -754,19 +767,19 @@ mod tests {
 
     #[test]
     fn global_precedence_overrides_per_container_disable() {
-        let sel = ContainerSelector::new(false, true, &[], false, false);
+        let sel = ContainerSelector::new(false, true, &[], &[], false, false);
         assert!(sel.is_selected(&running("app", &[("saurron.enable", "false")])));
     }
 
     #[test]
     fn global_precedence_disable_containers_still_excluded() {
-        let sel = ContainerSelector::new(false, true, &["app".to_string()], false, false);
+        let sel = ContainerSelector::new(false, true, &["app".to_string()], &[], false, false);
         assert!(!sel.is_selected(&running("app", &[])));
     }
 
     #[test]
     fn global_precedence_no_label_still_included() {
-        let sel = ContainerSelector::new(false, true, &[], false, false);
+        let sel = ContainerSelector::new(false, true, &[], &[], false, false);
         assert!(sel.is_selected(&running("app", &[])));
     }
 
@@ -800,5 +813,78 @@ mod tests {
         let result = opt_in().select(&containers);
         assert_eq!(result.len(), 2);
         assert!(result.iter().all(|c| c.name == "a" || c.name == "c"));
+    }
+
+    // allowed_names (--containers)
+
+    #[test]
+    fn allowed_names_empty_slice_means_no_restriction() {
+        let sel = ContainerSelector::new(false, false, &[], &[], false, false);
+        assert!(sel.allowed_names.is_none());
+        assert!(sel.is_selected(&running("any", &[])));
+    }
+
+    #[test]
+    fn allowed_names_matching_container_included() {
+        let sel = ContainerSelector::new(
+            false,
+            false,
+            &[],
+            &["foo".to_string(), "bar".to_string()],
+            false,
+            false,
+        );
+        assert!(sel.is_selected(&running("foo", &[])));
+        assert!(sel.is_selected(&running("bar", &[])));
+    }
+
+    #[test]
+    fn allowed_names_non_matching_container_excluded() {
+        let sel = ContainerSelector::new(false, false, &[], &["foo".to_string()], false, false);
+        assert!(!sel.is_selected(&running("other", &[])));
+    }
+
+    #[test]
+    fn allowed_names_disable_containers_still_excludes() {
+        let sel = ContainerSelector::new(
+            false,
+            false,
+            &["foo".to_string()],
+            &["foo".to_string()],
+            false,
+            false,
+        );
+        // foo is in allowed_names but also in disabled_names — disabled wins
+        assert!(!sel.is_selected(&running("foo", &[])));
+    }
+
+    #[test]
+    fn allowed_names_with_label_enable_still_requires_label() {
+        let sel = ContainerSelector::new(true, false, &[], &["foo".to_string()], false, false);
+        // foo is in allowed_names but label_enable mode requires saurron.enable=true
+        assert!(!sel.is_selected(&running("foo", &[])));
+        assert!(sel.is_selected(&running("foo", &[("saurron.enable", "true")])));
+    }
+
+    #[test]
+    fn allowed_names_select_filters_to_listed_containers() {
+        let containers = vec![
+            running("foo", &[]),
+            running("bar", &[]),
+            running("baz", &[]),
+        ];
+        let sel = ContainerSelector::new(
+            false,
+            false,
+            &[],
+            &["foo".to_string(), "baz".to_string()],
+            false,
+            false,
+        );
+        let result = sel.select(&containers);
+        assert_eq!(result.len(), 2);
+        assert!(result.iter().any(|c| c.name == "foo"));
+        assert!(result.iter().any(|c| c.name == "baz"));
+        assert!(!result.iter().any(|c| c.name == "bar"));
     }
 }
