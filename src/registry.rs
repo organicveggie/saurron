@@ -80,10 +80,16 @@ pub struct RegistryClient {
     client: reqwest::Client,
     head_warn_strategy: HeadWarnStrategy,
     user_agent: String,
+    /// Optional `(username, password)` for registry authentication.
+    credentials: Option<(String, String)>,
 }
 
 impl RegistryClient {
-    pub fn new(head_warn_strategy: HeadWarnStrategy, version: &str) -> Result<Self> {
+    pub fn new(
+        head_warn_strategy: HeadWarnStrategy,
+        version: &str,
+        credentials: Option<(String, String)>,
+    ) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -92,6 +98,7 @@ impl RegistryClient {
             client,
             head_warn_strategy,
             user_agent: format!("saurron/{version}"),
+            credentials,
         })
     }
 
@@ -339,6 +346,9 @@ impl RegistryClient {
         }
         if !scope.is_empty() {
             req = req.query(&[("scope", &scope)]);
+        }
+        if let Some((ref username, ref password)) = self.credentials {
+            req = req.basic_auth(username, Some(password));
         }
 
         let resp = req.send().await?;
