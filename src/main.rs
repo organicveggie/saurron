@@ -120,8 +120,16 @@ async fn main() -> anyhow::Result<()> {
         info!(id = %c.id, name = %c.name, image = %c.image, state = %c.state, "Container selected");
     }
 
-    let registry_client = registry::RegistryClient::new(config.head_warn_strategy, VERSION)
-        .context("failed to initialise registry client")?;
+    let credentials = match (
+        config.registry_username.clone(),
+        config.registry_password.clone(),
+    ) {
+        (Some(u), Some(p)) => Some((u, p)),
+        _ => None,
+    };
+    let registry_client =
+        registry::RegistryClient::new(config.head_warn_strategy, VERSION, credentials)
+            .context("failed to initialise registry client")?;
 
     let mut stale_count = 0usize;
     for container in &selected {

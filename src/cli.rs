@@ -227,6 +227,14 @@ pub struct Args {
     )]
     pub head_warn_strategy: Option<HeadWarnStrategy>,
 
+    /// Registry username for authenticated pulls
+    #[arg(long, env = "SAURRON_REGISTRY_USERNAME", value_name = "USERNAME")]
+    pub registry_username: Option<String>,
+
+    /// Registry password (or path to a Docker secret file) for authenticated pulls
+    #[arg(long, env = "SAURRON_REGISTRY_PASSWORD", value_name = "PASSWORD")]
+    pub registry_password: Option<String>,
+
     // === HTTP API ===
     /// Enable POST /v1/update endpoint
     #[arg(
