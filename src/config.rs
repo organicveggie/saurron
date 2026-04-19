@@ -25,6 +25,8 @@ pub struct Config {
     pub stop_timeout: String,
     pub rollback: RollbackConfig,
     pub head_warn_strategy: HeadWarnStrategy,
+    pub registry_username: Option<String>,
+    pub registry_password: Option<String>,
     pub http_api: HttpApiConfig,
     pub notifications: NotificationsConfig,
 }
@@ -125,6 +127,8 @@ struct PartialConfig {
     revive_stopped: Option<bool>,
     stop_timeout: Option<String>,
     head_warn_strategy: Option<HeadWarnStrategy>,
+    registry_username: Option<String>,
+    registry_password: Option<String>,
     docker: Option<PartialDockerConfig>,
     rollback: Option<PartialRollbackConfig>,
     http_api: Option<PartialHttpApiConfig>,
@@ -434,6 +438,8 @@ impl Config {
                 .head_warn_strategy
                 .or(p.head_warn_strategy)
                 .unwrap_or(HeadWarnStrategy::Auto),
+            registry_username: args.registry_username.clone().or(p.registry_username),
+            registry_password: args.registry_password.clone().or(p.registry_password),
             http_api: HttpApiConfig {
                 update: args.http_api_update.or(ph.update).unwrap_or(false),
                 metrics: args.http_api_metrics.or(ph.metrics).unwrap_or(false),
@@ -464,6 +470,9 @@ impl Config {
     /// Replace designated sensitive field values with file contents if the value
     /// is a readable file path (Docker secrets pattern).
     fn resolve_secrets(&mut self) -> Result<()> {
+        if let Some(ref v) = self.registry_password.clone() {
+            self.registry_password = Some(resolve_secret_file(v)?);
+        }
         if let Some(ref v) = self.http_api.token.clone() {
             self.http_api.token = Some(resolve_secret_file(v)?);
         }
