@@ -324,10 +324,14 @@ impl RegistryClient {
         repository: &str,
         registry: &str,
     ) -> Result<String, RegistryError> {
+<<<<<<< HEAD
         // docker.io requires a POST to the Hub API when credentials are present.
         // Without credentials, fall through to the standard anonymous GET flow —
         // auth.docker.io/token issues anonymous tokens for public images.
         if registry == "registry-1.docker.io" && self.credentials.is_some() {
+=======
+        if registry == "registry-1.docker.io" {
+>>>>>>> d4c5622 (Tweak auth process for docker.io)
             return self.fetch_docker_hub_token(registry).await;
         }
 
