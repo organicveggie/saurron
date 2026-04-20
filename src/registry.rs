@@ -115,6 +115,7 @@ impl RegistryClient {
                 return FreshnessResult::Error(format!("failed to parse image ref '{image}': {e}"));
             }
         };
+        debug!(image = %image, registry = %image_ref.registry, repository = %image_ref.repository, "checking image freshness");
 
         match &image_ref.reference.clone() {
             ImageReference::Digest(d) => FreshnessResult::Skipped(format!(
@@ -233,6 +234,7 @@ impl RegistryClient {
             "https://{}/v2/{}/manifests/{}",
             image_ref.registry, image_ref.repository, tag
         );
+        debug!(registry = %image_ref.registry, repository = %image_ref.repository, tag = %tag, url = %url, "fetching manifest digest");
         let resp = self
             .do_request_with_auth(
                 reqwest::Method::HEAD,
@@ -254,6 +256,7 @@ impl RegistryClient {
             "https://{}/v2/{}/tags/list",
             image_ref.registry, image_ref.repository
         );
+        debug!(url = %url, "fetching tag list");
         let resp = self
             .do_request_with_auth(
                 reqwest::Method::GET,
@@ -301,7 +304,6 @@ impl RegistryClient {
             let token = self
                 .fetch_bearer_token(&www_auth, repository, registry)
                 .await?;
-
             let resp = self
                 .client
                 .request(method, url)
@@ -322,6 +324,10 @@ impl RegistryClient {
         repository: &str,
         registry: &str,
     ) -> Result<String, RegistryError> {
+        if registry == "registry-1.docker.io" {
+            return self.fetch_docker_hub_token(registry).await;
+        }
+
         #[derive(Deserialize)]
         struct TokenResponse {
             token: Option<String>,
@@ -370,6 +376,53 @@ impl RegistryClient {
                 registry: registry.to_string(),
                 reason: "token response missing 'token' field".to_string(),
             })
+    }
+
+    async fn fetch_docker_hub_token(&self, registry: &str) -> Result<String, RegistryError> {
+        let Some((ref username, ref password)) = self.credentials else {
+            return Err(RegistryError::AuthFailed {
+                registry: registry.to_string(),
+                reason: "no credentials configured for docker.io".to_string(),
+            });
+        };
+
+        #[derive(Deserialize)]
+        struct HubTokenResponse {
+            access_token: String,
+        }
+
+        let resp = self
+            .client
+            .post("https://hub.docker.com/v2/auth/token")
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::USER_AGENT, &self.user_agent)
+            .json(&serde_json::json!({
+                "identifier": username,
+                "secret": password,
+            }))
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(RegistryError::AuthFailed {
+                registry: registry.to_string(),
+                reason: format!("docker.io token endpoint returned HTTP {}", resp.status()),
+            });
+        }
+
+        let body: HubTokenResponse = resp.json().await.map_err(|e| RegistryError::AuthFailed {
+            registry: registry.to_string(),
+            reason: format!("failed to parse docker.io token response: {e}"),
+        })?;
+
+        Ok(body.access_token)
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn test_fetch_docker_hub_token_no_creds(
+        &self,
+    ) -> Result<String, RegistryError> {
+        self.fetch_docker_hub_token("registry-1.docker.io").await
     }
 }
 
@@ -808,6 +861,21 @@ mod tests {
     fn www_auth_not_bearer_returns_empty() {
         let (realm, _, _) = parse_www_authenticate("Basic realm=\"registry\"", "repo");
         assert!(realm.is_empty());
+    }
+
+    // ── docker hub token auth ─────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn docker_hub_token_no_credentials_returns_auth_failed() {
+        let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None).unwrap();
+        let err = client
+            .test_fetch_docker_hub_token_no_creds()
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, RegistryError::AuthFailed { .. }),
+            "expected AuthFailed, got {err:?}"
+        );
     }
 
     // ── proptest ──────────────────────────────────────────────────────────────
