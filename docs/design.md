@@ -380,6 +380,7 @@ Only running containers are candidates by default. Stopped and restarting contai
 | ---------------------- | --------------------------------------------------------------- |
 | `--revive-stopped`     | Treat containers in `created` or `exited` state same as running |
 | `--include-restarting` | Include containers in `restarting` state                        |
+| `--containers`         | Allow-list: only the named containers are considered; all others are ignored. State filters (`--revive-stopped`, `--include-restarting`), `--disable-containers`, and label checks still apply on top. |
 
 ### Opt-Out (Default Mode)
 
@@ -553,6 +554,7 @@ End-to-end in top-level `tests/` directory; run against real Docker daemon via `
 | ------------------------------------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------- | ------------------------- |
 | Opt-in mode: only update containers with `saurron.enable=true`                                                      | `--label-enable`               | `SAURRON_LABEL_ENABLE`            | `label_enable`            |
 | Comma-separated container names to always exclude                                                                   | `--disable-containers <names>` | `SAURRON_DISABLE_CONTAINERS`      | `disable_containers`      |
+| Comma-separated container names allow-list; all others are ignored                                                  | `--containers <names>`         | `SAURRON_CONTAINERS`              | `containers`              |
 | Include containers in `restarting` state                                                                            | `--include-restarting`         | `SAURRON_INCLUDE_RESTARTING`      | `include_restarting`      |
 | Global flags take precedence over per-container labels for `monitor-only` and `no-pull` (default: label precedence) | `--global-takes-precedence`    | `SAURRON_GLOBAL_TAKES_PRECEDENCE` | `global_takes_precedence` |
 

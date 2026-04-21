@@ -20,7 +20,7 @@ Inspired by [Watchtower](https://github.com/containrrr/watchtower).
 - **Configuration layer** — layered config from TOML file, environment variables, and CLI flags with correct precedence; Docker secrets support via file path resolution
 - **Docker client** — connects via Unix socket or TLS-secured TCP; configurable API version; verifies daemon reachability on startup
 - **Container enumeration** — lists running, restarting, and stopped containers with full opt-in / opt-out selection logic
-- **Container selection** — per-container label overrides (`saurron.enable`), `--disable-containers` exclusion list, `--label-enable` opt-in mode, `--global-takes-precedence` flag
+- **Container selection** — per-container label overrides (`saurron.enable`), `--containers` allow-list, `--disable-containers` exclusion list, `--label-enable` opt-in mode, `--global-takes-precedence` flag
 - **Structured logging** — four output formats: `pretty` (colored TTY), `json` (newline-delimited), `logfmt` (key=value), `auto` (detects TTY); configurable log level; `RUST_LOG` override supported
 - **Audit trail** — append-only JSON log file capturing every update and rollback event (container name/id, old and new image digests and tags, outcome, failure reason)
 
