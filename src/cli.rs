@@ -102,6 +102,15 @@ pub struct Args {
     )]
     pub disable_containers: Option<Vec<String>>,
 
+    /// Comma-separated container names to consider; all others are ignored
+    #[arg(
+        long,
+        env = "SAURRON_CONTAINERS",
+        value_name = "NAMES",
+        value_delimiter = ','
+    )]
+    pub containers: Option<Vec<String>>,
+
     /// Include containers in restarting state
     #[arg(
         long,

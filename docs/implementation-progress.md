@@ -62,11 +62,11 @@
 **Completed work:**
 
 - `src/docker.rs` — added `use std::collections::HashSet`
-- `ContainerSelector` struct with fields: `label_enable`, `global_takes_precedence`, `disabled_names: HashSet<String>`, `include_restarting`, `revive_stopped`
+- `ContainerSelector` struct with fields: `label_enable`, `global_takes_precedence`, `disabled_names: HashSet<String>`, `allowed_names: Option<HashSet<String>>`, `include_restarting`, `revive_stopped`
 - `state_filter()` — returns `["running"]` base, appends `"restarting"` if `--include-restarting`, appends `"exited"`/`"created"` if `--revive-stopped`
-- `is_selected()` — hard-excludes by `disabled_names`, then: opt-in mode (`label_enable=true`) requires `saurron.enable=true`; opt-out + `global_takes_precedence=true` ignores per-container disable labels; opt-out default excludes only containers with `saurron.enable=false`
+- `is_selected()` — first checks `allowed_names` allow-list (if set), then hard-excludes by `disabled_names`, then: opt-in mode (`label_enable=true`) requires `saurron.enable=true`; opt-out + `global_takes_precedence=true` ignores per-container disable labels; opt-out default excludes only containers with `saurron.enable=false`
 - `select()` — filters a `&[ContainerInfo]` slice, returning owned `Vec<ContainerInfo>`
-- 19 new unit tests (53 total): state filter combinations, opt-in/opt-out behaviour, `disable_containers` hard-exclude, `global_takes_precedence` override, and `select()` end-to-end
+- 25 unit tests (59 total in docker.rs): state filter combinations, opt-in/opt-out behaviour, `disable_containers` hard-exclude, `global_takes_precedence` override, `select()` end-to-end, and 6 new `allowed_names` tests
 
 ### Step 4 — Enumeration & wire to main (milestone)
 
@@ -130,6 +130,19 @@
   - `Scan complete` log line with stale count, total, and monitor-only flag
 
 **Milestone verification:** `saurron --monitor-only --log-format pretty` connects to Docker, enumerates containers, checks each against its registry, logs stale/up-to-date/skipped results, exits cleanly. All 97 unit and property-based tests pass.
+
+---
+
+## Post-Phase 4 Enhancement — `--containers` allow-list flag
+
+**Status:** Complete
+
+**Completed work:**
+
+- `src/cli.rs` — added `--containers` / `SAURRON_CONTAINERS` flag accepting a comma-separated list of container names
+- `src/config.rs` — added `containers: Vec<String>` to `Config` and `PartialConfig`; wired through `merge()`
+- `src/docker.rs` — added `allowed_names: Option<HashSet<String>>` to `ContainerSelector`; `new()` accepts a `containers: &[String]` parameter and sets `allowed_names` to `Some(set)` when non-empty, `None` otherwise; `is_selected()` checks allow-list first before all other filters; 6 new unit tests covering: empty slice → no restriction, matching name → included, non-matching → excluded, `disable_containers` overlap → disabled wins, `label_enable` interaction → label check still applies, `select()` end-to-end
+- `src/main.rs` — passes `&config.containers` to `ContainerSelector::new()`
 
 ---
 

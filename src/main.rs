@@ -105,6 +105,7 @@ async fn main() -> anyhow::Result<()> {
         config.label_enable,
         config.global_takes_precedence,
         &config.disable_containers,
+        &config.containers,
         config.include_restarting,
         config.revive_stopped,
     );

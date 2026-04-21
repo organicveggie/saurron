@@ -16,6 +16,7 @@ pub struct Config {
     pub docker: DockerConfig,
     pub label_enable: bool,
     pub disable_containers: Vec<String>,
+    pub containers: Vec<String>,
     pub include_restarting: bool,
     pub global_takes_precedence: bool,
     pub monitor_only: bool,
@@ -119,6 +120,7 @@ struct PartialConfig {
     run_once: Option<bool>,
     label_enable: Option<bool>,
     disable_containers: Option<Vec<String>>,
+    containers: Option<Vec<String>>,
     include_restarting: Option<bool>,
     global_takes_precedence: Option<bool>,
     monitor_only: Option<bool>,
@@ -407,6 +409,7 @@ impl Config {
                 .clone()
                 .or(p.disable_containers)
                 .unwrap_or_default(),
+            containers: args.containers.clone().or(p.containers).unwrap_or_default(),
             include_restarting: args
                 .include_restarting
                 .or(p.include_restarting)
