@@ -3,10 +3,11 @@ mod cli;
 mod config;
 mod docker;
 mod registry;
+mod update;
 
 use anyhow::Context as _;
 use clap::Parser;
-use tracing::{info, warn};
+use tracing::info;
 
 const VERSION: &str = env!("SAURRON_VERSION");
 
@@ -131,71 +132,8 @@ async fn main() -> anyhow::Result<()> {
         registry::RegistryClient::new(config.head_warn_strategy, VERSION, credentials)
             .context("failed to initialise registry client")?;
 
-    let mut stale_count = 0usize;
-    for container in &selected {
-        let image_info = match docker.get_local_image_info(&container.image).await {
-            Ok(info) => info,
-            Err(e) => {
-                warn!(
-                    container = %container.name,
-                    image = %container.image,
-                    error = %e,
-                    "failed to inspect local image; treating as no local digest"
-                );
-                docker::LocalImageInfo::default()
-            }
-        };
-
-        // Prefer the registry-canonical name from RepoTags over whatever Docker
-        // stored in the container summary (which can be a bare sha256 ID when
-        // the container was started by digest or the tag was removed).
-        let image_for_check = image_info.name.as_deref().unwrap_or(&container.image);
-
-        let labels = container.saurron_labels();
-        let allow_pre = labels.semver_pre_release.unwrap_or(false);
-        let strategy = labels
-            .non_semver_strategy
-            .as_deref()
-            .map(registry::parse_non_semver_strategy)
-            .unwrap_or_default();
-
-        let result = registry_client
-            .check_freshness(
-                image_for_check,
-                image_info.digest.as_deref(),
-                allow_pre,
-                strategy,
-            )
-            .await;
-
-        match &result {
-            registry::FreshnessResult::UpToDate => {
-                tracing::debug!(container = %container.name, "image up to date");
-            }
-            registry::FreshnessResult::Stale(info) => {
-                stale_count += 1;
-                info!(
-                    container = %container.name,
-                    current_digest = %info.current_digest,
-                    new_image = %info.new_image,
-                    "stale image detected"
-                );
-            }
-            registry::FreshnessResult::Skipped(reason) => {
-                info!(container = %container.name, reason, "freshness check skipped");
-            }
-            registry::FreshnessResult::Error(reason) => {
-                warn!(container = %container.name, reason, "freshness check failed");
-            }
-        }
-    }
-
-    info!(
-        stale = stale_count,
-        total = selected.len(),
-        monitor_only = config.monitor_only,
-        "Scan complete"
-    );
+    let engine = update::UpdateEngine::new(&docker, &registry_client, &config);
+    engine.run_cycle(&selected).await;
 
     Ok(())
 }

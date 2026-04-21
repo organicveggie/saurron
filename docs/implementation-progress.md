@@ -148,7 +148,34 @@
 
 ## Phase 5 — Update engine (happy path)
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `Cargo.toml` — added `futures = "0.3"` (required for consuming bollard's pull stream via `TryStreamExt`)
+- `src/docker.rs` — extended `SaurronLabels` with four new per-container label fields (`monitor_only`, `no_pull`, `stop_signal`, `stop_timeout`) + label constants + `from_labels` arms + 10 new unit tests (75 total in docker.rs); added 7 new `DockerClient` async methods: `inspect_container`, `pull_image` (streams progress at trace level, bails on error items), `stop_container` (treats HTTP 304 as success), `remove_container`, `create_container` (returns new container ID), `start_container`, `remove_image`
+- `src/update.rs` (new) — full update engine module:
+  - `parse_duration_secs()` — parses `"10s"` / `"5m"` / `"1h"` / bare integer; 8 unit tests
+  - `ContainerRunConfig` struct — owned snapshot of full container config (env, volumes, ports, networks, host_config fields) for recreating container with new image
+  - `extract_run_config()` — maps `ContainerInspectResponse` → `ContainerRunConfig`
+  - `build_create_config()` — maps `ContainerRunConfig` + new image → `bollard::container::Config<String>`; applies stop signal override
+  - `parse_link_target()` — extracts Docker `--link` target name; 4 unit tests
+  - `build_dependency_graph()` — builds `dep_graph[name] = [deps]` from `saurron.depends-on` labels, Docker `--link`, and `network_mode: container:<name>`; 3 unit tests
+  - `topological_sort()` — Kahn's algorithm on reverse dependency graph (leaves-first; containers with no dependents update before containers that others depend on); cycle members appended at end with `warn!`; 4 unit tests
+  - `UpdateResult` enum (`UpToDate` / `Skipped(String)` / `Updated { old_image, old_digest, new_image, new_digest }` / `Failed(anyhow::Error)`)
+  - `SessionReport` struct — accumulates updated/skipped/failed/up_to_date counts
+  - `resolve_bool_override()` — per-container label override resolution respecting `global_takes_precedence`; 3 unit tests
+  - `UpdateEngine<'a>` — owns refs to `DockerClient`, `RegistryClient`, `Config`; derives credentials from config
+  - `UpdateEngine::run_cycle()` — full cycle: freshness scan → inspect stale containers → topological sort → sequential update; logs session summary
+  - `UpdateEngine::check_freshness()` — same logic as the former inline loop in main.rs
+  - `UpdateEngine::update_one()` — happy-path update: pull → stop → remove → create → start → startup check (10s wait, warn if not running; rollback deferred to Phase 6) → audit trail → optional cleanup
+- `src/main.rs` — replaced the inline freshness-check loop (lines 134–198) with `UpdateEngine::new(&docker, &registry_client, &config).run_cycle(&selected).await`
+
+**Milestone verification:** All 140 unit and property-based tests pass. Binary compiles cleanly. `cargo run -- --run-once --monitor-only` still detects stale containers and exits. `cargo run -- --run-once` executes full update cycles with pull → stop → recreate → start → audit trail.
+
+**Notes:**
+- Phase 5 startup monitoring is intentionally simple: wait `min(startup_timeout, 10)` seconds then check `state.running`; if false, log warning and continue (no rollback). Full startup monitoring and rollback are Phase 6.
+- `audit_rollback()` still has no call sites; wired in Phase 6.
 
 ---
 

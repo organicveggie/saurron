@@ -116,6 +116,10 @@ const LABEL_DEPENDS_ON: &str = "saurron.depends-on";
 const LABEL_IMAGE_TAG: &str = "saurron.image-tag";
 const LABEL_SEMVER_PRE_RELEASE: &str = "saurron.semver-pre-release";
 const LABEL_NON_SEMVER_STRATEGY: &str = "saurron.non-semver-strategy";
+const LABEL_MONITOR_ONLY: &str = "saurron.monitor-only";
+const LABEL_NO_PULL: &str = "saurron.no-pull";
+const LABEL_STOP_SIGNAL: &str = "saurron.stop-signal";
+const LABEL_STOP_TIMEOUT: &str = "saurron.stop-timeout";
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SaurronLabels {
@@ -127,6 +131,14 @@ pub struct SaurronLabels {
     pub semver_pre_release: Option<bool>,
     /// Override non-semver tag strategy: `"digest"` (default) or `"skip"`.
     pub non_semver_strategy: Option<String>,
+    /// Detect + notify only; do not pull or restart.
+    pub monitor_only: Option<bool>,
+    /// Restart from cached image without pulling.
+    pub no_pull: Option<bool>,
+    /// Override stop signal (e.g. `"SIGHUP"`).
+    pub stop_signal: Option<String>,
+    /// Override graceful stop timeout (e.g. `"30s"`).
+    pub stop_timeout: Option<String>,
 }
 
 impl SaurronLabels {
@@ -149,6 +161,10 @@ impl SaurronLabels {
                 .get(LABEL_NON_SEMVER_STRATEGY)
                 .filter(|v| !v.is_empty())
                 .cloned(),
+            monitor_only: labels.get(LABEL_MONITOR_ONLY).and_then(|v| parse_bool_label(v)),
+            no_pull: labels.get(LABEL_NO_PULL).and_then(|v| parse_bool_label(v)),
+            stop_signal: labels.get(LABEL_STOP_SIGNAL).filter(|v| !v.is_empty()).cloned(),
+            stop_timeout: labels.get(LABEL_STOP_TIMEOUT).filter(|v| !v.is_empty()).cloned(),
         }
     }
 }
@@ -402,6 +418,126 @@ impl DockerClient {
 
         Ok(local_image_info_from_inspect(&inspect))
     }
+
+    pub async fn inspect_container(
+        &self,
+        id: &str,
+    ) -> Result<bollard::models::ContainerInspectResponse> {
+        self.inner
+            .inspect_container(id, None)
+            .await
+            .with_context(|| format!("failed to inspect container '{id}'"))
+    }
+
+    pub async fn pull_image(
+        &self,
+        image: &str,
+        credentials: Option<(String, String)>,
+    ) -> Result<()> {
+        use bollard::auth::DockerCredentials;
+        use bollard::image::CreateImageOptions;
+        use futures::TryStreamExt as _;
+
+        let creds = credentials.map(|(username, password)| DockerCredentials {
+            username: Some(username),
+            password: Some(password),
+            ..Default::default()
+        });
+        let opts = CreateImageOptions {
+            from_image: image,
+            ..Default::default()
+        };
+        let mut stream = self.inner.create_image(Some(opts), None, creds);
+        while let Some(info) = stream
+            .try_next()
+            .await
+            .with_context(|| format!("error pulling image '{image}'"))?
+        {
+            if let Some(status) = &info.status {
+                tracing::trace!(image, status, "pull progress");
+            }
+            if let Some(err) = &info.error {
+                anyhow::bail!("pull failed for '{}': {}", image, err);
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn stop_container(&self, id: &str, timeout_secs: i64) -> Result<()> {
+        use bollard::container::StopContainerOptions;
+        match self
+            .inner
+            .stop_container(id, Some(StopContainerOptions { t: timeout_secs }))
+            .await
+        {
+            Ok(()) => Ok(()),
+            // 304 = container already stopped; treat as success
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 304, ..
+            }) => Ok(()),
+            Err(e) => {
+                Err(anyhow::Error::from(e).context(format!("failed to stop container '{id}'")))
+            }
+        }
+    }
+
+    pub async fn remove_container(&self, id: &str) -> Result<()> {
+        use bollard::container::RemoveContainerOptions;
+        self.inner
+            .remove_container(
+                id,
+                Some(RemoveContainerOptions {
+                    force: false,
+                    v: false,
+                    link: false,
+                }),
+            )
+            .await
+            .with_context(|| format!("failed to remove container '{id}'"))
+    }
+
+    pub async fn create_container(
+        &self,
+        name: &str,
+        config: bollard::container::Config<String>,
+    ) -> Result<String> {
+        use bollard::container::CreateContainerOptions;
+        let resp = self
+            .inner
+            .create_container(
+                Some(CreateContainerOptions {
+                    name,
+                    platform: None,
+                }),
+                config,
+            )
+            .await
+            .with_context(|| format!("failed to create container '{name}'"))?;
+        Ok(resp.id)
+    }
+
+    pub async fn start_container(&self, id: &str) -> Result<()> {
+        self.inner
+            .start_container(id, None::<bollard::container::StartContainerOptions<String>>)
+            .await
+            .with_context(|| format!("failed to start container '{id}'"))
+    }
+
+    pub async fn remove_image(&self, image: &str) -> Result<()> {
+        use bollard::image::RemoveImageOptions;
+        self.inner
+            .remove_image(
+                image,
+                Some(RemoveImageOptions {
+                    force: false,
+                    noprune: false,
+                }),
+                None,
+            )
+            .await
+            .with_context(|| format!("failed to remove image '{image}'"))?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -654,6 +790,57 @@ mod tests {
     fn saurron_labels_non_semver_strategy_empty_is_none() {
         let l = SaurronLabels::from_labels(&labels(&[("saurron.non-semver-strategy", "")]));
         assert_eq!(l.non_semver_strategy, None);
+    }
+
+    #[test]
+    fn saurron_labels_monitor_only_true() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.monitor-only", "true")]));
+        assert_eq!(l.monitor_only, Some(true));
+    }
+
+    #[test]
+    fn saurron_labels_monitor_only_false() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.monitor-only", "false")]));
+        assert_eq!(l.monitor_only, Some(false));
+    }
+
+    #[test]
+    fn saurron_labels_monitor_only_invalid_is_none() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.monitor-only", "yes")]));
+        assert_eq!(l.monitor_only, None);
+    }
+
+    #[test]
+    fn saurron_labels_no_pull_true() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.no-pull", "true")]));
+        assert_eq!(l.no_pull, Some(true));
+    }
+
+    #[test]
+    fn saurron_labels_stop_signal_set() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.stop-signal", "SIGHUP")]));
+        assert_eq!(l.stop_signal, Some("SIGHUP".to_string()));
+    }
+
+    #[test]
+    fn saurron_labels_stop_signal_empty_is_none() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.stop-signal", "")]));
+        assert_eq!(l.stop_signal, None);
+    }
+
+    #[test]
+    fn saurron_labels_stop_timeout_set() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.stop-timeout", "30s")]));
+        assert_eq!(l.stop_timeout, Some("30s".to_string()));
+    }
+
+    #[test]
+    fn saurron_labels_new_fields_default_none() {
+        let l = SaurronLabels::default();
+        assert_eq!(l.monitor_only, None);
+        assert_eq!(l.no_pull, None);
+        assert_eq!(l.stop_signal, None);
+        assert_eq!(l.stop_timeout, None);
     }
 
     #[test]
