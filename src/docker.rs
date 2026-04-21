@@ -114,6 +114,8 @@ const LABEL_ENABLE: &str = "saurron.enable";
 const LABEL_SCOPE: &str = "saurron.scope";
 const LABEL_DEPENDS_ON: &str = "saurron.depends-on";
 const LABEL_IMAGE_TAG: &str = "saurron.image-tag";
+const LABEL_SEMVER_PRE_RELEASE: &str = "saurron.semver-pre-release";
+const LABEL_NON_SEMVER_STRATEGY: &str = "saurron.non-semver-strategy";
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct SaurronLabels {
@@ -121,6 +123,10 @@ pub struct SaurronLabels {
     pub scope: Option<String>,
     pub depends_on: Vec<String>,
     pub image_tag: Option<String>,
+    /// Include pre-release versions when selecting the latest SemVer tag.
+    pub semver_pre_release: Option<bool>,
+    /// Override non-semver tag strategy: `"digest"` (default) or `"skip"`.
+    pub non_semver_strategy: Option<String>,
 }
 
 impl SaurronLabels {
@@ -134,6 +140,13 @@ impl SaurronLabels {
                 .unwrap_or_default(),
             image_tag: labels
                 .get(LABEL_IMAGE_TAG)
+                .filter(|v| !v.is_empty())
+                .cloned(),
+            semver_pre_release: labels
+                .get(LABEL_SEMVER_PRE_RELEASE)
+                .and_then(|v| parse_bool_label(v)),
+            non_semver_strategy: labels
+                .get(LABEL_NON_SEMVER_STRATEGY)
                 .filter(|v| !v.is_empty())
                 .cloned(),
         }
@@ -236,6 +249,32 @@ impl ContainerSelector {
             .cloned()
             .collect()
     }
+}
+
+// ── Local image info ──────────────────────────────────────────────────────────
+
+/// Canonical name and manifest digest of a locally-present image.
+#[derive(Debug, Default, PartialEq)]
+pub struct LocalImageInfo {
+    /// First `RepoTags` entry, e.g. `"postgres:15"`.
+    pub name: Option<String>,
+    /// Manifest digest from first `RepoDigests` entry (part after `@`),
+    /// e.g. `"sha256:6eed15406dbba206cb1260528a3354d80d2522cab068cb9ad7a1ede5ac90e6f6"`.
+    pub digest: Option<String>,
+}
+
+fn local_image_info_from_inspect(inspect: &bollard::models::ImageInspect) -> LocalImageInfo {
+    let name = inspect
+        .repo_tags
+        .as_deref()
+        .and_then(|tags| tags.first())
+        .cloned();
+    let digest = inspect
+        .repo_digests
+        .as_deref()
+        .and_then(|digests| digests.first())
+        .and_then(|rd| rd.split_once('@').map(|(_, d)| d.to_string()));
+    LocalImageInfo { name, digest }
 }
 
 // ── Bollard summary → ContainerInfo ──────────────────────────────────────────
@@ -344,6 +383,24 @@ impl DockerClient {
         selector: &ContainerSelector,
     ) -> Vec<ContainerInfo> {
         selector.select(containers)
+    }
+
+    /// Inspects a local image (by name or sha256 ID) and returns its canonical
+    /// name and manifest digest.
+    ///
+    /// `name` is taken from the first `RepoTags` entry (e.g. `"postgres:15"`).
+    /// `digest` is taken from the first `RepoDigests` entry after the `@`
+    /// separator (e.g. `"sha256:6eed15..."`).
+    ///
+    /// Either field may be `None` for dangling or locally-built images.
+    pub async fn get_local_image_info(&self, image: &str) -> Result<LocalImageInfo> {
+        let inspect = self
+            .inner
+            .inspect_image(image)
+            .await
+            .with_context(|| format!("failed to inspect image '{image}'"))?;
+
+        Ok(local_image_info_from_inspect(&inspect))
     }
 }
 
@@ -564,6 +621,42 @@ mod tests {
     }
 
     #[test]
+    fn saurron_labels_semver_pre_release_true() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.semver-pre-release", "true")]));
+        assert_eq!(l.semver_pre_release, Some(true));
+    }
+
+    #[test]
+    fn saurron_labels_semver_pre_release_false() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.semver-pre-release", "false")]));
+        assert_eq!(l.semver_pre_release, Some(false));
+    }
+
+    #[test]
+    fn saurron_labels_semver_pre_release_invalid_is_none() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.semver-pre-release", "yes")]));
+        assert_eq!(l.semver_pre_release, None);
+    }
+
+    #[test]
+    fn saurron_labels_non_semver_strategy_skip() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.non-semver-strategy", "skip")]));
+        assert_eq!(l.non_semver_strategy, Some("skip".to_string()));
+    }
+
+    #[test]
+    fn saurron_labels_non_semver_strategy_digest() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.non-semver-strategy", "digest")]));
+        assert_eq!(l.non_semver_strategy, Some("digest".to_string()));
+    }
+
+    #[test]
+    fn saurron_labels_non_semver_strategy_empty_is_none() {
+        let l = SaurronLabels::from_labels(&labels(&[("saurron.non-semver-strategy", "")]));
+        assert_eq!(l.non_semver_strategy, None);
+    }
+
+    #[test]
     fn saurron_labels_unknown_saurron_labels_ignored() {
         let l = SaurronLabels::from_labels(&labels(&[
             ("saurron.enable", "true"),
@@ -587,6 +680,65 @@ mod tests {
         let sl = info.saurron_labels();
         assert_eq!(sl.enable, Some(true));
         assert_eq!(sl.image_tag, Some("stable".to_string()));
+    }
+
+    // ── local_image_info_from_inspect ─────────────────────────────────────────
+
+    fn make_inspect(
+        repo_tags: Option<Vec<&str>>,
+        repo_digests: Option<Vec<&str>>,
+    ) -> bollard::models::ImageInspect {
+        bollard::models::ImageInspect {
+            repo_tags: repo_tags.map(|v| v.into_iter().map(String::from).collect()),
+            repo_digests: repo_digests.map(|v| v.into_iter().map(String::from).collect()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn image_info_name_from_first_repo_tag() {
+        let inspect = make_inspect(
+            Some(vec!["postgres:15", "postgres:latest"]),
+            Some(vec![
+                "postgres@sha256:6eed15406dbba206cb1260528a3354d80d2522cab068cb9ad7a1ede5ac90e6f6",
+            ]),
+        );
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.name, Some("postgres:15".to_string()));
+        assert_eq!(
+            info.digest,
+            Some(
+                "sha256:6eed15406dbba206cb1260528a3354d80d2522cab068cb9ad7a1ede5ac90e6f6"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn image_info_empty_repo_tags_gives_none_name() {
+        let inspect = make_inspect(Some(vec![]), Some(vec!["postgres@sha256:abc"]));
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.name, None);
+        assert_eq!(info.digest, Some("sha256:abc".to_string()));
+    }
+
+    #[test]
+    fn image_info_none_fields_give_none() {
+        let inspect = make_inspect(None, None);
+        assert_eq!(
+            local_image_info_from_inspect(&inspect),
+            LocalImageInfo::default()
+        );
+    }
+
+    #[test]
+    fn image_info_digest_extracted_after_at_sign() {
+        let inspect = make_inspect(
+            Some(vec!["nginx:latest"]),
+            Some(vec!["nginx@sha256:deadbeef"]),
+        );
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.digest, Some("sha256:deadbeef".to_string()));
     }
 
     // ── ContainerSelector ─────────────────────────────────────────────────────
