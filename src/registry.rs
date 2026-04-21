@@ -866,6 +866,39 @@ mod tests {
         assert!(realm.is_empty());
     }
 
+    // ── split_registry_and_repo ───────────────────────────────────────────────
+
+    #[test]
+    fn split_registry_and_repo_official_image() {
+        let (reg, repo) = split_registry_and_repo("nginx");
+        assert_eq!(reg, "registry-1.docker.io");
+        assert_eq!(repo, "library/nginx");
+    }
+
+    #[test]
+    fn split_registry_and_repo_namespaced() {
+        let (reg, repo) = split_registry_and_repo("myorg/myapp");
+        assert_eq!(reg, "registry-1.docker.io");
+        assert_eq!(repo, "myorg/myapp");
+    }
+
+    #[test]
+    fn split_registry_and_repo_localhost() {
+        let (reg, repo) = split_registry_and_repo("localhost/myapp");
+        assert_eq!(reg, "localhost");
+        assert_eq!(repo, "myapp");
+    }
+
+    // ── split_auth_pairs ──────────────────────────────────────────────────────
+
+    #[test]
+    fn split_auth_pairs_quoted_commas_not_split() {
+        let pairs = split_auth_pairs(r#"realm="https://auth.io",scope="repository:foo,bar:pull""#);
+        assert_eq!(pairs.len(), 2);
+        assert_eq!(pairs[0], r#"realm="https://auth.io""#);
+        assert_eq!(pairs[1], r#"scope="repository:foo,bar:pull""#);
+    }
+
     // ── docker hub token auth ─────────────────────────────────────────────────
 
     #[tokio::test]

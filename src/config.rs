@@ -586,4 +586,37 @@ mod tests {
         let cfg = Config::load(&args(&["--run-once"])).unwrap();
         assert!(cfg.run_once);
     }
+
+    #[test]
+    fn monitor_only_flag() {
+        let cfg = Config::load(&args(&["--monitor-only"])).unwrap();
+        assert!(cfg.monitor_only);
+    }
+
+    #[test]
+    fn no_pull_flag() {
+        let cfg = Config::load(&args(&["--no-pull"])).unwrap();
+        assert!(cfg.no_pull);
+    }
+
+    #[test]
+    fn webhook_url_creates_webhook_config() {
+        let cfg = Config::load(&args(&["--webhook-url", "https://example.com/hook"])).unwrap();
+        let wh = cfg.notifications.webhook.expect("webhook should be Some");
+        assert_eq!(wh.url, "https://example.com/hook");
+        assert!(!wh.tls_skip_verify);
+    }
+
+    #[test]
+    fn pushover_absent_without_both_fields() {
+        let cfg = Config::load(&args(&["--notification-pushover-token", "tok123"])).unwrap();
+        assert!(cfg.notifications.pushover.is_none());
+    }
+
+    #[test]
+    fn resolve_secret_file_non_path_returns_literal() {
+        let cfg =
+            Config::load(&args(&["--registry-password", "plaintextpassword"])).unwrap();
+        assert_eq!(cfg.registry_password, Some("plaintextpassword".to_string()));
+    }
 }
