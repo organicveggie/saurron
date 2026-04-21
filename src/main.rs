@@ -133,8 +133,8 @@ async fn main() -> anyhow::Result<()> {
 
     let mut stale_count = 0usize;
     for container in &selected {
-        let local_digest = match docker.get_image_manifest_digest(&container.image).await {
-            Ok(d) => d,
+        let image_info = match docker.get_local_image_info(&container.image).await {
+            Ok(info) => info,
             Err(e) => {
                 warn!(
                     container = %container.name,
@@ -142,9 +142,14 @@ async fn main() -> anyhow::Result<()> {
                     error = %e,
                     "failed to inspect local image; treating as no local digest"
                 );
-                None
+                docker::LocalImageInfo::default()
             }
         };
+
+        // Prefer the registry-canonical name from RepoTags over whatever Docker
+        // stored in the container summary (which can be a bare sha256 ID when
+        // the container was started by digest or the tag was removed).
+        let image_for_check = image_info.name.as_deref().unwrap_or(&container.image);
 
         let labels = container.saurron_labels();
         let allow_pre = labels.semver_pre_release.unwrap_or(false);
@@ -156,8 +161,8 @@ async fn main() -> anyhow::Result<()> {
 
         let result = registry_client
             .check_freshness(
-                &container.image,
-                local_digest.as_deref(),
+                image_for_check,
+                image_info.digest.as_deref(),
                 allow_pre,
                 strategy,
             )

@@ -251,6 +251,32 @@ impl ContainerSelector {
     }
 }
 
+// ── Local image info ──────────────────────────────────────────────────────────
+
+/// Canonical name and manifest digest of a locally-present image.
+#[derive(Debug, Default, PartialEq)]
+pub struct LocalImageInfo {
+    /// First `RepoTags` entry, e.g. `"postgres:15"`.
+    pub name: Option<String>,
+    /// Manifest digest from first `RepoDigests` entry (part after `@`),
+    /// e.g. `"sha256:6eed15406dbba206cb1260528a3354d80d2522cab068cb9ad7a1ede5ac90e6f6"`.
+    pub digest: Option<String>,
+}
+
+fn local_image_info_from_inspect(inspect: &bollard::models::ImageInspect) -> LocalImageInfo {
+    let name = inspect
+        .repo_tags
+        .as_deref()
+        .and_then(|tags| tags.first())
+        .cloned();
+    let digest = inspect
+        .repo_digests
+        .as_deref()
+        .and_then(|digests| digests.first())
+        .and_then(|rd| rd.split_once('@').map(|(_, d)| d.to_string()));
+    LocalImageInfo { name, digest }
+}
+
 // ── Bollard summary → ContainerInfo ──────────────────────────────────────────
 
 fn summary_to_info(s: bollard::models::ContainerSummary) -> Option<ContainerInfo> {
@@ -359,22 +385,22 @@ impl DockerClient {
         selector.select(containers)
     }
 
-    /// Returns the manifest digest (`sha256:...`) stored in Docker's RepoDigests
-    /// for the given image name, or `None` if no digest is recorded locally.
-    pub async fn get_image_manifest_digest(&self, image: &str) -> Result<Option<String>> {
+    /// Inspects a local image (by name or sha256 ID) and returns its canonical
+    /// name and manifest digest.
+    ///
+    /// `name` is taken from the first `RepoTags` entry (e.g. `"postgres:15"`).
+    /// `digest` is taken from the first `RepoDigests` entry after the `@`
+    /// separator (e.g. `"sha256:6eed15..."`).
+    ///
+    /// Either field may be `None` for dangling or locally-built images.
+    pub async fn get_local_image_info(&self, image: &str) -> Result<LocalImageInfo> {
         let inspect = self
             .inner
             .inspect_image(image)
             .await
             .with_context(|| format!("failed to inspect image '{image}'"))?;
 
-        let digest = inspect
-            .repo_digests
-            .unwrap_or_default()
-            .into_iter()
-            .find_map(|rd| rd.split_once('@').map(|(_, d)| d.to_string()));
-
-        Ok(digest)
+        Ok(local_image_info_from_inspect(&inspect))
     }
 }
 
@@ -654,6 +680,65 @@ mod tests {
         let sl = info.saurron_labels();
         assert_eq!(sl.enable, Some(true));
         assert_eq!(sl.image_tag, Some("stable".to_string()));
+    }
+
+    // ── local_image_info_from_inspect ─────────────────────────────────────────
+
+    fn make_inspect(
+        repo_tags: Option<Vec<&str>>,
+        repo_digests: Option<Vec<&str>>,
+    ) -> bollard::models::ImageInspect {
+        bollard::models::ImageInspect {
+            repo_tags: repo_tags.map(|v| v.into_iter().map(String::from).collect()),
+            repo_digests: repo_digests.map(|v| v.into_iter().map(String::from).collect()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn image_info_name_from_first_repo_tag() {
+        let inspect = make_inspect(
+            Some(vec!["postgres:15", "postgres:latest"]),
+            Some(vec![
+                "postgres@sha256:6eed15406dbba206cb1260528a3354d80d2522cab068cb9ad7a1ede5ac90e6f6",
+            ]),
+        );
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.name, Some("postgres:15".to_string()));
+        assert_eq!(
+            info.digest,
+            Some(
+                "sha256:6eed15406dbba206cb1260528a3354d80d2522cab068cb9ad7a1ede5ac90e6f6"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn image_info_empty_repo_tags_gives_none_name() {
+        let inspect = make_inspect(Some(vec![]), Some(vec!["postgres@sha256:abc"]));
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.name, None);
+        assert_eq!(info.digest, Some("sha256:abc".to_string()));
+    }
+
+    #[test]
+    fn image_info_none_fields_give_none() {
+        let inspect = make_inspect(None, None);
+        assert_eq!(
+            local_image_info_from_inspect(&inspect),
+            LocalImageInfo::default()
+        );
+    }
+
+    #[test]
+    fn image_info_digest_extracted_after_at_sign() {
+        let inspect = make_inspect(
+            Some(vec!["nginx:latest"]),
+            Some(vec!["nginx@sha256:deadbeef"]),
+        );
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.digest, Some("sha256:deadbeef".to_string()));
     }
 
     // ── ContainerSelector ─────────────────────────────────────────────────────
