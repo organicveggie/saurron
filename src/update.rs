@@ -885,6 +885,64 @@ mod tests {
         assert!(resolve_bool_override(true, false, None));
     }
 
+    // ── build_create_config ───────────────────────────────────────────────────
+
+    fn default_run_cfg() -> ContainerRunConfig {
+        ContainerRunConfig {
+            hostname: None,
+            domainname: None,
+            user: None,
+            env: None,
+            cmd: None,
+            entrypoint: None,
+            working_dir: None,
+            tty: None,
+            open_stdin: None,
+            stop_signal: None,
+            labels: None,
+            exposed_ports: None,
+            binds: None,
+            volumes_from: None,
+            port_bindings: None,
+            restart_policy: None,
+            network_mode: None,
+            links: None,
+            extra_hosts: None,
+            cap_add: None,
+            cap_drop: None,
+            privileged: None,
+            devices: None,
+            log_config: None,
+            shm_size: None,
+            ulimits: None,
+            init: None,
+            networks: None,
+        }
+    }
+
+    #[test]
+    fn build_create_config_sets_new_image() {
+        let run_cfg = default_run_cfg();
+        let cfg = build_create_config(&run_cfg, "myrepo/myapp:2.0.0", None);
+        assert_eq!(cfg.image, Some("myrepo/myapp:2.0.0".to_string()));
+    }
+
+    #[test]
+    fn build_create_config_stop_signal_override_takes_precedence() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.stop_signal = Some("SIGKILL".to_string());
+        let cfg = build_create_config(&run_cfg, "img:latest", Some("SIGTERM"));
+        assert_eq!(cfg.stop_signal, Some("SIGTERM".to_string()));
+    }
+
+    #[test]
+    fn build_create_config_stop_signal_from_run_config_when_no_override() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.stop_signal = Some("SIGKILL".to_string());
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        assert_eq!(cfg.stop_signal, Some("SIGKILL".to_string()));
+    }
+
     // ── extract_run_config ────────────────────────────────────────────────────
 
     #[test]
@@ -912,5 +970,48 @@ mod tests {
         let run_cfg = extract_run_config(&inspect);
         assert_eq!(run_cfg.env, Some(vec!["FOO=bar".to_string()]));
         assert_eq!(run_cfg.labels, Some(map));
+    }
+
+    #[test]
+    fn extract_run_config_with_env() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            config: Some(bollard::models::ContainerConfig {
+                env: Some(vec!["PATH=/usr/bin".to_string(), "HOME=/root".to_string()]),
+                hostname: Some("myhost".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(
+            run_cfg.env,
+            Some(vec!["PATH=/usr/bin".to_string(), "HOME=/root".to_string()])
+        );
+        assert_eq!(run_cfg.hostname, Some("myhost".to_string()));
+    }
+
+    // ── topological_sort — diamond dependency ─────────────────────────────────
+
+    #[test]
+    fn topological_sort_diamond_deps() {
+        // A depends on B and C; B and C both depend on D.
+        // Update order (dependents first): A, then B/C, then D.
+        let a = make_container("a");
+        let b = make_container("b");
+        let c = make_container("c");
+        let d = make_container("d");
+        let containers = vec![a, b, c, d];
+        let mut deps: HashMap<String, Vec<String>> = HashMap::new();
+        deps.insert("a".to_string(), vec!["b".to_string(), "c".to_string()]);
+        deps.insert("b".to_string(), vec!["d".to_string()]);
+        deps.insert("c".to_string(), vec!["d".to_string()]);
+        deps.insert("d".to_string(), vec![]);
+        let sorted = topological_sort(&containers, &deps);
+        let names: Vec<&str> = sorted.iter().map(|c| c.name.as_str()).collect();
+        let pos = |n: &str| names.iter().position(|&x| x == n).unwrap();
+        assert!(pos("a") < pos("b"));
+        assert!(pos("a") < pos("c"));
+        assert!(pos("b") < pos("d"));
+        assert!(pos("c") < pos("d"));
     }
 }
