@@ -16,11 +16,7 @@ config = { version = "0.15", default-features = false, features = ["toml"] }
 lettre = { version = "0.11", default-features = false }
 minijinja = "2"
 prometheus = "0.14"
-<<<<<<< HEAD
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
-=======
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
->>>>>>> 7c3f261 (Major create updates)
 rumqttc-next = "0.30.0"
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
