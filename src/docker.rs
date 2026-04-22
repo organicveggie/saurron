@@ -941,6 +941,67 @@ mod tests {
         assert_eq!(info.digest, Some("sha256:deadbeef".to_string()));
     }
 
+    // ── summary_to_info ───────────────────────────────────────────────────────
+
+    fn make_summary(
+        id: Option<&str>,
+        names: Option<Vec<&str>>,
+        image: Option<&str>,
+        state: Option<&str>,
+    ) -> bollard::models::ContainerSummary {
+        bollard::models::ContainerSummary {
+            id: id.map(String::from),
+            names: names.map(|v| v.into_iter().map(String::from).collect()),
+            image: image.map(String::from),
+            image_id: None,
+            state: state.map(String::from),
+            labels: None,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn summary_to_info_happy_path() {
+        let s = make_summary(
+            Some("abc123def456"),
+            Some(vec!["/myapp"]),
+            Some("nginx:latest"),
+            Some("running"),
+        );
+        let info = summary_to_info(s).expect("should be Some");
+        assert_eq!(info.id, "abc123def456");
+        assert_eq!(info.name, "myapp");
+        assert_eq!(info.image, "nginx:latest");
+        assert!(matches!(info.state, ContainerState::Running));
+    }
+
+    #[test]
+    fn summary_to_info_none_id_returns_none() {
+        let s = make_summary(None, Some(vec!["/myapp"]), Some("nginx:latest"), Some("running"));
+        assert!(summary_to_info(s).is_none());
+    }
+
+    #[test]
+    fn summary_to_info_no_names_gives_empty_string() {
+        let s = make_summary(Some("abc123"), None, Some("nginx:latest"), Some("running"));
+        let info = summary_to_info(s).unwrap();
+        assert_eq!(info.name, "");
+    }
+
+    #[test]
+    fn summary_to_info_none_state_gives_unknown() {
+        let s = make_summary(Some("abc123"), Some(vec!["/myapp"]), None, None);
+        let info = summary_to_info(s).unwrap();
+        assert!(matches!(info.state, ContainerState::Unknown(_)));
+    }
+
+    #[test]
+    fn summary_to_info_slash_prefix_stripped_from_name() {
+        let s = make_summary(Some("abc123"), Some(vec!["/some-container"]), None, Some("running"));
+        let info = summary_to_info(s).unwrap();
+        assert_eq!(info.name, "some-container");
+    }
+
     // ── ContainerSelector ─────────────────────────────────────────────────────
 
     fn make_container(name: &str, state: ContainerState, ls: &[(&str, &str)]) -> ContainerInfo {

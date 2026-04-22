@@ -1556,4 +1556,204 @@ mod tests {
         assert!(pos("b") < pos("d"));
         assert!(pos("c") < pos("d"));
     }
+
+    // ── extract_run_config — host_config fields ───────────────────────────────
+
+    #[test]
+    fn extract_run_config_copies_host_config_fields() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                binds: Some(vec!["/data:/data:ro".to_string()]),
+                network_mode: Some("bridge".to_string()),
+                privileged: Some(true),
+                cap_add: Some(vec!["NET_ADMIN".to_string()]),
+                cap_drop: Some(vec!["ALL".to_string()]),
+                extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
+                shm_size: Some(67_108_864),
+                init: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(run_cfg.binds, Some(vec!["/data:/data:ro".to_string()]));
+        assert_eq!(run_cfg.network_mode, Some("bridge".to_string()));
+        assert_eq!(run_cfg.privileged, Some(true));
+        assert_eq!(run_cfg.cap_add, Some(vec!["NET_ADMIN".to_string()]));
+        assert_eq!(run_cfg.cap_drop, Some(vec!["ALL".to_string()]));
+        assert_eq!(
+            run_cfg.extra_hosts,
+            Some(vec!["host.docker.internal:host-gateway".to_string()])
+        );
+        assert_eq!(run_cfg.shm_size, Some(67_108_864));
+        assert_eq!(run_cfg.init, Some(true));
+    }
+
+    #[test]
+    fn extract_run_config_copies_volumes_from_and_links() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                volumes_from: Some(vec!["data-container".to_string()]),
+                links: Some(vec!["/redis:/app/redis".to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(
+            run_cfg.volumes_from,
+            Some(vec!["data-container".to_string()])
+        );
+        assert!(run_cfg.links.is_some());
+    }
+
+    // ── extract_run_config — network_settings ─────────────────────────────────
+
+    #[test]
+    fn extract_run_config_copies_network_settings() {
+        let mut networks = HashMap::new();
+        networks.insert(
+            "mynet".to_string(),
+            bollard::models::EndpointSettings::default(),
+        );
+        let inspect = bollard::models::ContainerInspectResponse {
+            network_settings: Some(bollard::models::NetworkSettings {
+                networks: Some(networks),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert!(run_cfg.networks.as_ref().unwrap().contains_key("mynet"));
+    }
+
+    // ── build_create_config — networking branch ───────────────────────────────
+
+    #[test]
+    fn build_create_config_with_networking_config() {
+        let mut run_cfg = default_run_cfg();
+        let mut networks = HashMap::new();
+        networks.insert(
+            "mynet".to_string(),
+            bollard::models::EndpointSettings::default(),
+        );
+        run_cfg.networks = Some(networks);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let nc = cfg.networking_config.unwrap();
+        assert!(nc.endpoints_config.unwrap().contains_key("mynet"));
+    }
+
+    #[test]
+    fn build_create_config_copies_host_config_fields() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.binds = Some(vec!["/data:/data:ro".to_string()]);
+        run_cfg.cap_add = Some(vec!["NET_ADMIN".to_string()]);
+        run_cfg.privileged = Some(true);
+        run_cfg.shm_size = Some(67_108_864);
+        run_cfg.init = Some(true);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let hc = cfg.host_config.unwrap();
+        assert_eq!(hc.binds, Some(vec!["/data:/data:ro".to_string()]));
+        assert_eq!(hc.cap_add, Some(vec!["NET_ADMIN".to_string()]));
+        assert_eq!(hc.privileged, Some(true));
+        assert_eq!(hc.shm_size, Some(67_108_864));
+        assert_eq!(hc.init, Some(true));
+    }
+
+    // ── SessionReport::record ─────────────────────────────────────────────────
+
+    #[test]
+    fn session_report_records_updated() {
+        let mut report = SessionReport::default();
+        report.record(
+            "nginx",
+            &UpdateResult::Updated {
+                old_image: "nginx:1.0".to_string(),
+                old_digest: "sha256:aaa".to_string(),
+                new_image: "nginx:2.0".to_string(),
+                new_digest: "sha256:bbb".to_string(),
+            },
+        );
+        assert_eq!(report.updated, vec!["nginx"]);
+        assert_eq!(report.up_to_date, 0);
+    }
+
+    #[test]
+    fn session_report_records_skipped() {
+        let mut report = SessionReport::default();
+        report.record("nginx", &UpdateResult::Skipped("monitor_only".to_string()));
+        assert_eq!(report.skipped, vec!["nginx"]);
+    }
+
+    #[test]
+    fn session_report_records_failed() {
+        let mut report = SessionReport::default();
+        report.record("nginx", &UpdateResult::Failed(anyhow::anyhow!("oops")));
+        assert_eq!(report.failed, vec!["nginx"]);
+    }
+
+    #[test]
+    fn session_report_records_rolled_back() {
+        let mut report = SessionReport::default();
+        report.record(
+            "nginx",
+            &UpdateResult::RolledBack {
+                old_image: "nginx:1.0".to_string(),
+                old_digest: "sha256:aaa".to_string(),
+                attempted_image: "nginx:2.0".to_string(),
+                attempted_digest: "sha256:bbb".to_string(),
+                reason: "healthcheck_failed".to_string(),
+            },
+        );
+        assert_eq!(report.rolled_back, vec!["nginx"]);
+    }
+
+    #[test]
+    fn session_report_records_up_to_date() {
+        let mut report = SessionReport::default();
+        report.record("nginx", &UpdateResult::UpToDate);
+        assert_eq!(report.up_to_date, 1);
+        assert!(report.updated.is_empty());
+    }
+
+    // ── build_dependency_graph — Docker --link ────────────────────────────────
+
+    #[test]
+    fn dep_graph_docker_link_in_set() {
+        let containers = vec![make_container("app"), make_container("redis")];
+        let mut inspect_map: HashMap<String, bollard::models::ContainerInspectResponse> =
+            HashMap::new();
+        inspect_map.insert(
+            "app".to_string(),
+            bollard::models::ContainerInspectResponse {
+                host_config: Some(bollard::models::HostConfig {
+                    links: Some(vec!["/redis:/app/redis".to_string()]),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        let graph = build_dependency_graph(&containers, &inspect_map);
+        assert!(graph["app"].contains(&"redis".to_string()));
+        assert!(graph["redis"].is_empty());
+    }
+
+    #[test]
+    fn dep_graph_docker_link_outside_set_ignored() {
+        let containers = vec![make_container("app")];
+        let mut inspect_map: HashMap<String, bollard::models::ContainerInspectResponse> =
+            HashMap::new();
+        inspect_map.insert(
+            "app".to_string(),
+            bollard::models::ContainerInspectResponse {
+                host_config: Some(bollard::models::HostConfig {
+                    links: Some(vec!["/external:/app/ext".to_string()]),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        let graph = build_dependency_graph(&containers, &inspect_map);
+        assert!(graph["app"].is_empty());
+    }
 }
