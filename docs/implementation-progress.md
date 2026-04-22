@@ -220,7 +220,40 @@
 
 ## Phase 7 — Scheduler & HTTP API
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `Cargo.toml` — added `cron = "0.12"` and `chrono = "0.4"` for cron expression parsing and datetime arithmetic
+- `src/update.rs` — `parse_duration_secs` changed from `pub` to `pub(crate)`; `SessionReport` now derives `serde::Serialize` so HTTP handlers can return it as JSON
+- `src/scheduler.rs` (new) — scheduling logic:
+  - `ScheduleMode` enum: `RunOnce`, `Interval(Duration)`, `Cron(Box<cron::Schedule>)`
+  - `parse_schedule_mode(config)` — validates mutual exclusion of `--run-once`/`--interval`/`--schedule` (catches TOML-file combinations not caught by clap `conflicts_with`); defaults to `Interval(86400s)` when no scheduling config is set
+  - `run_scheduler<F, Fut>(mode, run_cycle)` — generic over a closure so the scheduler has no knowledge of `AppStateInner`; `RunOnce`: call once and return; `Interval`: run immediately then sleep; `Cron`: sleep until next trigger via `schedule.upcoming(Utc).next()` then run
+  - 7 unit tests: `run_once_mode`, `interval_default_is_24h`, `interval_from_flag`, `interval_hours`, `cron_mode_from_flag`, `invalid_cron_expression_is_error`, `run_once_calls_cycle_exactly_once` (async)
+- `src/http.rs` (new) — HTTP API server:
+  - `AppStateInner` struct: owns `DockerClient`, `RegistryClient`, `Config`, `ContainerSelector`, and `tokio::sync::Mutex<()>` (update lock); `AppState = Arc<AppStateInner>`
+  - `validate_token_config(cfg)` — fails fast at startup if `--http-api-update` is set without `--http-api-token`, or `--http-api-metrics` without token and without `--http-api-metrics-no-auth`
+  - `check_auth(headers, token)` — extracts `Authorization: Bearer <value>` and compares with configured token
+  - `run_cycle_with_state(state)` — shared async function used by both scheduler closure and HTTP handler; re-lists containers on every call to pick up Docker state changes
+  - `GET /v1/health` — always available when server is running; returns 200 OK; no auth required
+  - `POST /v1/update` — Bearer token auth; `try_lock()` returns 409 if a cycle is already running; supports `?container=<name>` and `?image=<ref>` query params (comma-separated) to scope which containers are updated; returns JSON `SessionReport`
+  - `GET /v1/metrics` — Bearer token auth (exempt if `--http-api-metrics-no-auth`); returns Prometheus text format via `prometheus::TextEncoder`; metric values wired in Phase 10
+  - `start_server(state)` — binds to `0.0.0.0:<port>`; conditionally registers `/v1/update` and `/v1/metrics` based on config flags; only starts when at least one API feature is enabled
+  - 9 unit tests: 5 for `validate_token_config`, 4 for `check_auth`
+- `src/main.rs` — restructured to use `Arc<AppStateInner>`:
+  - `validate_token_config` and `parse_schedule_mode` called immediately after config load (fail fast before Docker connect)
+  - `DockerClient`, `RegistryClient`, `ContainerSelector` moved into `Arc<AppStateInner>`; startup enumeration kept for logging only
+  - `RunOnce`: calls `run_cycle_with_state` directly and exits
+  - Polling/Cron: scheduler spawned as a `tokio::task`; scheduler acquires `.lock().await` before each cycle (waits behind any in-progress HTTP-triggered cycle); HTTP handler uses `.try_lock()` (returns 409 if scheduler is running); `tokio::select!` races HTTP server and scheduler task when HTTP API is enabled
+
+**Milestone verification:** `cargo build` succeeds; all 198 unit and property-based tests pass; `cargo clippy` clean (no new warnings from Phase 7 code); `cargo fmt` clean.
+
+**Notes:**
+
+- `GET /v1/metrics` returns a valid (empty) Prometheus text response; Phase 10 wires the actual metric values
+- The HTTP server starts only when `--http-api-update` or `--http-api-metrics` is set; `GET /v1/health` is always registered when the server runs
+- Lock semantics: scheduler uses `.lock().await` (waits); HTTP POST uses `.try_lock()` (skip/409) — prevents double-cycle overlap while allowing HTTP to interrupt idle wait
 
 ---
 

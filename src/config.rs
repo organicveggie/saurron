@@ -688,9 +688,11 @@ mod tests {
 
     #[test]
     fn mqtt_absent_without_topic() {
-        let cfg =
-            Config::load(&args(&["--notification-mqtt-broker", "tcp://broker.example.com:1883"]))
-                .unwrap();
+        let cfg = Config::load(&args(&[
+            "--notification-mqtt-broker",
+            "tcp://broker.example.com:1883",
+        ]))
+        .unwrap();
         assert!(cfg.notifications.mqtt.is_none());
     }
 

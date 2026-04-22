@@ -908,7 +908,10 @@ mod tests {
             repository: "myorg/myapp".to_string(),
             reference: ImageReference::Tag("1.0.0".to_string()),
         };
-        assert_eq!(format_image_ref(&image_ref, "1.0.0"), "myorg/myapp/docker.io:1.0.0");
+        assert_eq!(
+            format_image_ref(&image_ref, "1.0.0"),
+            "myorg/myapp/docker.io:1.0.0"
+        );
     }
 
     #[test]
@@ -918,7 +921,10 @@ mod tests {
             repository: "myorg/myapp".to_string(),
             reference: ImageReference::Tag("latest".to_string()),
         };
-        assert_eq!(format_image_ref(&image_ref, "latest"), "myorg/myapp/ghcr.io:latest");
+        assert_eq!(
+            format_image_ref(&image_ref, "latest"),
+            "myorg/myapp/ghcr.io:latest"
+        );
     }
 
     // ── normalize_digest ──────────────────────────────────────────────────────
