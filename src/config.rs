@@ -618,4 +618,104 @@ mod tests {
         let cfg = Config::load(&args(&["--registry-password", "plaintextpassword"])).unwrap();
         assert_eq!(cfg.registry_password, Some("plaintextpassword".to_string()));
     }
+
+    #[test]
+    fn no_rollback_on_healthcheck_flag() {
+        let cfg = Config::load(&args(&["--no-rollback-on-healthcheck"])).unwrap();
+        assert!(!cfg.rollback.on_healthcheck);
+        assert!(cfg.rollback.on_exit_code);
+        assert!(cfg.rollback.on_timeout);
+    }
+
+    #[test]
+    fn no_rollback_on_timeout_flag() {
+        let cfg = Config::load(&args(&["--no-rollback-on-timeout"])).unwrap();
+        assert!(!cfg.rollback.on_timeout);
+        assert!(cfg.rollback.on_exit_code);
+        assert!(cfg.rollback.on_healthcheck);
+    }
+
+    #[test]
+    fn email_config_with_all_required_fields() {
+        let cfg = Config::load(&args(&[
+            "--notification-email-from",
+            "from@example.com",
+            "--notification-email-to",
+            "to@example.com",
+            "--notification-email-server",
+            "smtp.example.com",
+        ]))
+        .unwrap();
+        let email = cfg.notifications.email.expect("email should be Some");
+        assert_eq!(email.from, "from@example.com");
+        assert_eq!(email.to, vec!["to@example.com".to_string()]);
+        assert_eq!(email.server, "smtp.example.com");
+        assert_eq!(email.port, 587);
+        assert!(email.user.is_none());
+        assert!(email.password.is_none());
+        assert!(!email.tls_skip_verify);
+    }
+
+    #[test]
+    fn email_absent_without_server() {
+        let cfg = Config::load(&args(&[
+            "--notification-email-from",
+            "from@example.com",
+            "--notification-email-to",
+            "to@example.com",
+        ]))
+        .unwrap();
+        assert!(cfg.notifications.email.is_none());
+    }
+
+    #[test]
+    fn mqtt_config_with_broker_and_topic() {
+        let cfg = Config::load(&args(&[
+            "--notification-mqtt-broker",
+            "tcp://broker.example.com:1883",
+            "--notification-mqtt-topic",
+            "saurron/updates",
+        ]))
+        .unwrap();
+        let mqtt = cfg.notifications.mqtt.expect("mqtt should be Some");
+        assert_eq!(mqtt.broker, "tcp://broker.example.com:1883");
+        assert_eq!(mqtt.topic, "saurron/updates");
+        assert_eq!(mqtt.qos, 0);
+        assert!(mqtt.client_id.is_none());
+        assert!(mqtt.username.is_none());
+        assert!(mqtt.password.is_none());
+    }
+
+    #[test]
+    fn mqtt_absent_without_topic() {
+        let cfg =
+            Config::load(&args(&["--notification-mqtt-broker", "tcp://broker.example.com:1883"]))
+                .unwrap();
+        assert!(cfg.notifications.mqtt.is_none());
+    }
+
+    #[test]
+    fn pushover_config_with_both_fields() {
+        let cfg = Config::load(&args(&[
+            "--notification-pushover-token",
+            "tok123",
+            "--notification-pushover-user-key",
+            "user456",
+        ]))
+        .unwrap();
+        let po = cfg.notifications.pushover.expect("pushover should be Some");
+        assert_eq!(po.token, "tok123");
+        assert_eq!(po.user_key, "user456");
+    }
+
+    #[test]
+    fn webhook_secret_file_resolution() {
+        let path = std::env::temp_dir().join("saurron_test_webhook_url.txt");
+        std::fs::write(&path, "https://secret-hook.example.com/hook").unwrap();
+        let path_str = path.to_str().unwrap().to_string();
+        let cfg = Config::load(&args(&["--webhook-url", &path_str])).unwrap();
+        std::fs::remove_file(&path).ok();
+        let wh = cfg.notifications.webhook.expect("webhook should be Some");
+        assert_eq!(wh.url, "https://secret-hook.example.com/hook");
+    }
 }

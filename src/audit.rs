@@ -41,3 +41,33 @@ pub fn audit_rollback(
         failure_reason = reason,
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audit_update_does_not_panic() {
+        audit_update(
+            "myapp",
+            "abc123def456",
+            "myapp:1.0.0",
+            "sha256:olddigest",
+            "myapp:1.1.0",
+            "sha256:newdigest",
+        );
+    }
+
+    #[test]
+    fn audit_rollback_does_not_panic() {
+        audit_rollback(
+            "myapp",
+            "abc123def456",
+            "myapp:1.1.0",
+            "sha256:newdigest",
+            "myapp:1.0.0",
+            "sha256:olddigest",
+            "startup_timeout",
+        );
+    }
+}

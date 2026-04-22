@@ -21,3 +21,7 @@ target
 #.idea/
 
 .claude/
+
+lcov.info
+
+tarpaulin-report.json

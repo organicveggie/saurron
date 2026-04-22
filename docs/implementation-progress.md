@@ -181,7 +181,40 @@
 
 ## Phase 6 — Rollback manager
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `src/update.rs` — full rollback manager wired into `update_one()`:
+  - `RolledBack` variant added to `UpdateResult` (`old_image`, `old_digest`, `attempted_image`, `attempted_digest`, `reason: String`)
+  - `rolled_back: Vec<String>` field added to `SessionReport`; `record()` match arm and Phase E summary log updated
+  - `RollbackTrigger` enum (`NonZeroExit(i64)`, `HealthcheckFailure`, `StartupTimeout`) with `reason_str()` producing structured reason strings (`"exit_code=N"`, `"healthcheck_failed"`, `"startup_timeout"`)
+  - `StartupEval` enum (`Ok`, `Rollback(RollbackTrigger)`, `Continue`) used by the pure per-poll decision function
+  - `evaluate_startup_state()` — pure function over a `ContainerState` snapshot; checks exit code, healthcheck status, and running state to produce a `StartupEval`; unit-testable without async; respects `on_exit_code` and `on_healthcheck` flags
+  - `monitor_startup()` — async polling loop (1s interval) up to `startup_timeout`; calls `evaluate_startup_state` each tick; returns `Ok(())` on success or `Err(RollbackTrigger)` on failure; transient inspect errors are logged and skipped; if deadline passed and `on_timeout=false`, returns `Ok` rather than blocking indefinitely
+  - Step 8 of `update_one()` replaced: on `Err(trigger)` from `monitor_startup`, stops and removes the new container, recreates and starts the old container from the preserved `run_cfg` + `old_image`, calls `audit::audit_rollback()`, returns `UpdateResult::RolledBack`; old image is never removed on rollback (cleanup step skipped by early return); rollback failure (create or start error) returns `UpdateResult::Failed` with context
+  - `run_cycle()` Phase D updated to log rolled-back containers at `warn!` level
+  - 12 new unit tests: 9 cases for `evaluate_startup_state` covering all health/exit/running combinations, 3 cases for `RollbackTrigger::reason_str`
+
+**Milestone verification:** All 182 unit and property-based tests pass. `cargo clippy` clean. `cargo fmt --check` clean.
+
+**Notes:**
+- `audit_rollback()` call site is in `update_one()` rollback branch; `audit_update()` call site is in the happy-path step 9 (unchanged from Phase 5)
+- Rollback itself failing (create/start error) returns `Failed`, not `RolledBack` — operator intervention required in that case
+
+---
+
+## Post-Phase 6 Enhancement — Increased test coverage
+
+**Status:** Complete
+
+**Completed work:**
+
+- Coverage increased from 38.7% to 45.7% (+7.0%) across 16 new tests:
+  - `src/audit.rs` — smoke tests for `audit_update()` and `audit_rollback()` (previously 0% covered); now 4/4 lines
+  - `src/config.rs` — `--no-rollback-on-healthcheck` and `--no-rollback-on-timeout` flag paths; email config construction (all 3 required fields present, and missing-field → `None`); MQTT config construction (broker + topic present, missing topic → `None`); Pushover config with both fields; webhook secret-file resolution via temp file; now 163/171 lines
+  - `src/docker.rs` — `ContainerState::Display` for `Created`, `Restarting`, `Removing`, `Paused`, `Dead` (only `Running`, `Exited`, `Unknown` were previously tested); now 91/211 lines
+  - `src/registry.rs` — `format_image_ref()`, `normalize_digest()`, `manifest_accept_header()` (three private pure functions with no prior test coverage); now 99/263 lines
 
 ---
 

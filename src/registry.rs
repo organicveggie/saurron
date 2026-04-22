@@ -899,6 +899,50 @@ mod tests {
         assert_eq!(pairs[1], r#"scope="repository:foo,bar:pull""#);
     }
 
+    // ── format_image_ref ─────────────────────────────────────────────────────
+
+    #[test]
+    fn format_image_ref_docker_hub_normalizes_to_docker_io() {
+        let image_ref = ImageRef {
+            registry: "registry-1.docker.io".to_string(),
+            repository: "myorg/myapp".to_string(),
+            reference: ImageReference::Tag("1.0.0".to_string()),
+        };
+        assert_eq!(format_image_ref(&image_ref, "1.0.0"), "myorg/myapp/docker.io:1.0.0");
+    }
+
+    #[test]
+    fn format_image_ref_custom_registry() {
+        let image_ref = ImageRef {
+            registry: "ghcr.io".to_string(),
+            repository: "myorg/myapp".to_string(),
+            reference: ImageReference::Tag("latest".to_string()),
+        };
+        assert_eq!(format_image_ref(&image_ref, "latest"), "myorg/myapp/ghcr.io:latest");
+    }
+
+    // ── normalize_digest ──────────────────────────────────────────────────────
+
+    #[test]
+    fn normalize_digest_trims_whitespace() {
+        assert_eq!(normalize_digest("  sha256:abc  "), "sha256:abc");
+    }
+
+    #[test]
+    fn normalize_digest_no_whitespace_unchanged() {
+        assert_eq!(normalize_digest("sha256:abc"), "sha256:abc");
+    }
+
+    // ── manifest_accept_header ────────────────────────────────────────────────
+
+    #[test]
+    fn manifest_accept_header_contains_oci_and_docker_types() {
+        let h = manifest_accept_header();
+        assert!(h.contains("application/vnd.docker.distribution.manifest.v2+json"));
+        assert!(h.contains("application/vnd.oci.image.manifest.v1+json"));
+        assert!(h.contains("application/vnd.oci.image.index.v1+json"));
+    }
+
     // ── docker hub token auth ─────────────────────────────────────────────────
 
     #[tokio::test]

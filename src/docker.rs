@@ -672,6 +672,15 @@ mod tests {
         );
     }
 
+    #[test]
+    fn container_state_display_remaining_variants() {
+        assert_eq!(ContainerState::Created.to_string(), "created");
+        assert_eq!(ContainerState::Restarting.to_string(), "restarting");
+        assert_eq!(ContainerState::Removing.to_string(), "removing");
+        assert_eq!(ContainerState::Paused.to_string(), "paused");
+        assert_eq!(ContainerState::Dead.to_string(), "dead");
+    }
+
     // ── SaurronLabels ─────────────────────────────────────────────────────────
 
     fn labels(pairs: &[(&str, &str)]) -> HashMap<String, String> {
