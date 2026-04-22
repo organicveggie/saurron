@@ -29,6 +29,16 @@
             "source": "devcontainer-cargo-cache-${devcontainerId}",
             "target": "/usr/local/cargo",
             "type": "volume"
+        },
+        {
+            "source": "${localEnv:HOME}/.claude.json",
+            "target": "/root/.claude.json",
+            "type": "bind"
+        },
+        {
+            "source": "${localEnv:HOME}/.claude",
+            "target": "/root/.claude",
+            "type": "bind"
         }
     ],
     // Use 'postCreateCommand' to run commands after the container is created.
