@@ -9,7 +9,7 @@ use crate::{audit, config, docker, registry};
 
 /// Parse a duration string of the form `<N><unit>` where unit is `s`, `m`, or `h`.
 /// A bare integer is treated as seconds.
-pub fn parse_duration_secs(s: &str) -> Result<u64> {
+pub(crate) fn parse_duration_secs(s: &str) -> Result<u64> {
     let s = s.trim();
     if s.is_empty() {
         anyhow::bail!("empty duration string");
@@ -299,7 +299,7 @@ pub enum UpdateResult {
     Failed(anyhow::Error),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize)]
 pub struct SessionReport {
     pub updated: Vec<String>,
     pub skipped: Vec<String>,

@@ -2,8 +2,12 @@ mod audit;
 mod cli;
 mod config;
 mod docker;
+mod http;
 mod registry;
+mod scheduler;
 mod update;
+
+use std::sync::Arc;
 
 use anyhow::Context as _;
 use clap::Parser;
@@ -98,6 +102,12 @@ async fn main() -> anyhow::Result<()> {
         "Saurron starting"
     );
 
+    // Validate HTTP API token config before binding any ports.
+    http::validate_token_config(&config.http_api)?;
+
+    // Validate scheduling flags (clap catches CLI conflicts; this catches TOML combinations).
+    let schedule_mode = scheduler::parse_schedule_mode(&config)?;
+
     let docker = docker::DockerClient::connect(&config.docker)?;
     docker.ping().await?;
     info!("Connected to Docker daemon");
@@ -110,6 +120,8 @@ async fn main() -> anyhow::Result<()> {
         config.include_restarting,
         config.revive_stopped,
     );
+
+    // Initial enumeration for startup logging only.
     let all_containers = docker.list_containers(&selector).await?;
     let selected = docker.select_containers(&all_containers, &selector);
     info!(
@@ -132,8 +144,41 @@ async fn main() -> anyhow::Result<()> {
         registry::RegistryClient::new(config.head_warn_strategy, VERSION, credentials)
             .context("failed to initialise registry client")?;
 
-    let engine = update::UpdateEngine::new(&docker, &registry_client, &config);
-    engine.run_cycle(&selected).await;
+    let state = Arc::new(http::AppStateInner {
+        docker,
+        registry: registry_client,
+        config,
+        selector,
+        update_lock: tokio::sync::Mutex::new(()),
+    });
+
+    let http_enabled = state.config.http_api.update || state.config.http_api.metrics;
+
+    if matches!(schedule_mode, scheduler::ScheduleMode::RunOnce) {
+        http::run_cycle_with_state(&state).await;
+        return Ok(());
+    }
+
+    let state_for_scheduler = Arc::clone(&state);
+    let scheduler_task = tokio::spawn(async move {
+        scheduler::run_scheduler(schedule_mode, move || {
+            let s = Arc::clone(&state_for_scheduler);
+            async move {
+                let _guard = s.update_lock.lock().await;
+                http::run_cycle_with_state(&s).await;
+            }
+        })
+        .await;
+    });
+
+    if http_enabled {
+        tokio::select! {
+            result = http::start_server(state) => { result?; }
+            _ = scheduler_task => {}
+        }
+    } else {
+        scheduler_task.await.ok();
+    }
 
     Ok(())
 }
