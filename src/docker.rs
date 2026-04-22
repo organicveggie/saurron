@@ -161,10 +161,18 @@ impl SaurronLabels {
                 .get(LABEL_NON_SEMVER_STRATEGY)
                 .filter(|v| !v.is_empty())
                 .cloned(),
-            monitor_only: labels.get(LABEL_MONITOR_ONLY).and_then(|v| parse_bool_label(v)),
+            monitor_only: labels
+                .get(LABEL_MONITOR_ONLY)
+                .and_then(|v| parse_bool_label(v)),
             no_pull: labels.get(LABEL_NO_PULL).and_then(|v| parse_bool_label(v)),
-            stop_signal: labels.get(LABEL_STOP_SIGNAL).filter(|v| !v.is_empty()).cloned(),
-            stop_timeout: labels.get(LABEL_STOP_TIMEOUT).filter(|v| !v.is_empty()).cloned(),
+            stop_signal: labels
+                .get(LABEL_STOP_SIGNAL)
+                .filter(|v| !v.is_empty())
+                .cloned(),
+            stop_timeout: labels
+                .get(LABEL_STOP_TIMEOUT)
+                .filter(|v| !v.is_empty())
+                .cloned(),
         }
     }
 }
@@ -518,7 +526,10 @@ impl DockerClient {
 
     pub async fn start_container(&self, id: &str) -> Result<()> {
         self.inner
-            .start_container(id, None::<bollard::container::StartContainerOptions<String>>)
+            .start_container(
+                id,
+                None::<bollard::container::StartContainerOptions<String>>,
+            )
             .await
             .with_context(|| format!("failed to start container '{id}'"))
     }

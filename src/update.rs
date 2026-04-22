@@ -289,6 +289,13 @@ pub enum UpdateResult {
         new_image: String,
         new_digest: String,
     },
+    RolledBack {
+        old_image: String,
+        old_digest: String,
+        attempted_image: String,
+        attempted_digest: String,
+        reason: String,
+    },
     Failed(anyhow::Error),
 }
 
@@ -297,6 +304,7 @@ pub struct SessionReport {
     pub updated: Vec<String>,
     pub skipped: Vec<String>,
     pub failed: Vec<String>,
+    pub rolled_back: Vec<String>,
     pub up_to_date: usize,
 }
 
@@ -306,8 +314,125 @@ impl SessionReport {
             UpdateResult::Updated { .. } => self.updated.push(name.to_string()),
             UpdateResult::Skipped(_) => self.skipped.push(name.to_string()),
             UpdateResult::Failed(_) => self.failed.push(name.to_string()),
+            UpdateResult::RolledBack { .. } => self.rolled_back.push(name.to_string()),
             UpdateResult::UpToDate => self.up_to_date += 1,
         }
+    }
+}
+
+// ── Rollback / startup monitoring ────────────────────────────────────────────
+
+#[derive(Debug, PartialEq)]
+enum RollbackTrigger {
+    NonZeroExit(i64),
+    HealthcheckFailure,
+    StartupTimeout,
+}
+
+impl RollbackTrigger {
+    fn reason_str(&self) -> String {
+        match self {
+            RollbackTrigger::NonZeroExit(code) => format!("exit_code={code}"),
+            RollbackTrigger::HealthcheckFailure => "healthcheck_failed".to_string(),
+            RollbackTrigger::StartupTimeout => "startup_timeout".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum StartupEval {
+    Ok,
+    Rollback(RollbackTrigger),
+    Continue,
+}
+
+/// Pure per-poll decision: given a container state snapshot, decide whether
+/// startup succeeded, failed (rollback), or is still in progress (continue).
+fn evaluate_startup_state(
+    state: &bollard::models::ContainerState,
+    on_exit_code: bool,
+    on_healthcheck: bool,
+) -> StartupEval {
+    use bollard::models::{ContainerStateStatusEnum, HealthStatusEnum};
+
+    let running = state.running.unwrap_or(false);
+    let exited = state.status == Some(ContainerStateStatusEnum::EXITED);
+
+    // Non-zero exit check
+    if on_exit_code && !running && exited {
+        let code = state.exit_code.unwrap_or(0);
+        if code != 0 {
+            return StartupEval::Rollback(RollbackTrigger::NonZeroExit(code));
+        }
+    }
+
+    // Healthcheck check (only meaningful when container is running)
+    if running {
+        if let Some(health) = &state.health {
+            match health.status {
+                Some(HealthStatusEnum::UNHEALTHY) if on_healthcheck => {
+                    return StartupEval::Rollback(RollbackTrigger::HealthcheckFailure);
+                }
+                Some(HealthStatusEnum::STARTING) | Some(HealthStatusEnum::EMPTY) => {
+                    // Still initializing
+                    return StartupEval::Continue;
+                }
+                _ => {
+                    // HEALTHY, NONE, or UNHEALTHY with on_healthcheck=false
+                    return StartupEval::Ok;
+                }
+            }
+        }
+        // Running with no healthcheck configured → success
+        return StartupEval::Ok;
+    }
+
+    StartupEval::Continue
+}
+
+async fn monitor_startup(
+    docker: &docker::DockerClient,
+    container_name: &str,
+    new_id: &str,
+    timeout_secs: u64,
+    on_exit_code: bool,
+    on_healthcheck: bool,
+    on_timeout: bool,
+) -> Result<(), RollbackTrigger> {
+    use tokio::time::{Duration, Instant, sleep};
+
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+
+    loop {
+        match docker.inspect_container(new_id).await {
+            Ok(resp) => {
+                if let Some(state) = &resp.state {
+                    match evaluate_startup_state(state, on_exit_code, on_healthcheck) {
+                        StartupEval::Ok => return Ok(()),
+                        StartupEval::Rollback(trigger) => return Err(trigger),
+                        StartupEval::Continue => {}
+                    }
+                }
+            }
+            Err(e) => {
+                // Transient API error — log and keep polling
+                tracing::debug!(
+                    container = %container_name,
+                    error = %e,
+                    "transient inspect error during startup monitoring"
+                );
+            }
+        }
+
+        if Instant::now() >= deadline {
+            if on_timeout {
+                return Err(RollbackTrigger::StartupTimeout);
+            } else {
+                return Ok(());
+            }
+        }
+
+        sleep(Duration::from_secs(1)).await;
     }
 }
 
@@ -379,10 +504,7 @@ impl<'a> UpdateEngine<'a> {
         }
 
         if stale.is_empty() {
-            info!(
-                total = containers.len(),
-                "All containers up to date"
-            );
+            info!(total = containers.len(), "All containers up to date");
             return report;
         }
 
@@ -423,8 +545,14 @@ impl<'a> UpdateEngine<'a> {
                 continue;
             };
             let result = self.update_one(container, stale_info, inspect).await;
-            if let UpdateResult::Failed(ref e) = result {
-                warn!(container = %container.name, error = %e, "update failed");
+            match &result {
+                UpdateResult::Failed(e) => {
+                    warn!(container = %container.name, error = %e, "update failed");
+                }
+                UpdateResult::RolledBack { reason, .. } => {
+                    warn!(container = %container.name, reason, "update rolled back");
+                }
+                _ => {}
             }
             report.record(&container.name, &result);
         }
@@ -432,6 +560,7 @@ impl<'a> UpdateEngine<'a> {
         // Phase E: session summary
         info!(
             updated = report.updated.len(),
+            rolled_back = report.rolled_back.len(),
             skipped = report.skipped.len(),
             failed = report.failed.len(),
             up_to_date = report.up_to_date,
@@ -487,8 +616,11 @@ impl<'a> UpdateEngine<'a> {
         let cfg = self.config;
 
         // Resolve per-container overrides
-        let effective_monitor_only =
-            resolve_bool_override(cfg.monitor_only, cfg.global_takes_precedence, labels.monitor_only);
+        let effective_monitor_only = resolve_bool_override(
+            cfg.monitor_only,
+            cfg.global_takes_precedence,
+            labels.monitor_only,
+        );
         let effective_no_pull =
             resolve_bool_override(cfg.no_pull, cfg.global_takes_precedence, labels.no_pull);
         // stop_signal: label always wins (no global stop-signal config)
@@ -598,36 +730,74 @@ impl<'a> UpdateEngine<'a> {
             );
         }
 
-        // Step 8: basic startup check (Phase 5 — rollback added in Phase 6)
+        // Step 8: startup monitoring + rollback
         let startup_timeout = parse_duration_secs(&cfg.rollback.startup_timeout).unwrap_or(30);
-        let wait_secs = startup_timeout.min(10);
-        tokio::time::sleep(tokio::time::Duration::from_secs(wait_secs)).await;
-        match self.docker.inspect_container(&new_id).await {
-            Ok(new_inspect) => {
-                let running = new_inspect
-                    .state
-                    .as_ref()
-                    .and_then(|s| s.running)
-                    .unwrap_or(false);
-                if !running {
-                    let status = new_inspect
-                        .state
-                        .as_ref()
-                        .and_then(|s| s.status.as_ref())
-                        .map(|s| format!("{s:?}"))
-                        .unwrap_or_else(|| "unknown".to_string());
-                    warn!(
-                        container = %container.name,
-                        new_id = %new_id,
-                        status,
-                        "container not running after startup (rollback deferred to Phase 6)"
-                    );
-                } else {
-                    info!(container = %container.name, new_id = %new_id, "container started successfully");
-                }
+        match monitor_startup(
+            self.docker,
+            &container.name,
+            &new_id,
+            startup_timeout,
+            cfg.rollback.on_exit_code,
+            cfg.rollback.on_healthcheck,
+            cfg.rollback.on_timeout,
+        )
+        .await
+        {
+            Ok(()) => {
+                info!(container = %container.name, new_id = %new_id, "container started successfully");
             }
-            Err(e) => {
-                warn!(container = %container.name, error = %e, "could not verify startup state");
+            Err(trigger) => {
+                let reason = trigger.reason_str();
+                warn!(
+                    container = %container.name,
+                    new_id = %new_id,
+                    reason,
+                    "startup check failed — rolling back"
+                );
+
+                // Stop and remove failed new container
+                let _ = self.docker.stop_container(&new_id, 10).await;
+                let _ = self.docker.remove_container(&new_id).await;
+
+                // Recreate old container from original run config + old image
+                let rollback_cfg =
+                    build_create_config(&run_cfg, &old_image, effective_stop_signal.as_deref());
+                match self
+                    .docker
+                    .create_container(&container.name, rollback_cfg)
+                    .await
+                {
+                    Err(e) => {
+                        return UpdateResult::Failed(e.context(format!(
+                            "rollback failed: could not recreate '{}' with old image",
+                            container.name
+                        )));
+                    }
+                    Ok(restored_id) => {
+                        if let Err(e) = self.docker.start_container(&restored_id).await {
+                            return UpdateResult::Failed(e.context(format!(
+                                "rollback failed: could not start restored container '{}'",
+                                container.name
+                            )));
+                        }
+                        audit::audit_rollback(
+                            &container.name,
+                            &restored_id,
+                            &stale_info.new_image,
+                            &new_digest,
+                            &old_image,
+                            &old_digest,
+                            &reason,
+                        );
+                        return UpdateResult::RolledBack {
+                            old_image,
+                            old_digest,
+                            attempted_image: stale_info.new_image.clone(),
+                            attempted_digest: new_digest,
+                            reason,
+                        };
+                    }
+                }
             }
         }
 
@@ -723,10 +893,7 @@ mod tests {
 
     #[test]
     fn link_target_simple_format() {
-        assert_eq!(
-            parse_link_target("redis:alias"),
-            Some("redis".to_string())
-        );
+        assert_eq!(parse_link_target("redis:alias"), Some("redis".to_string()));
     }
 
     #[test]
@@ -757,7 +924,11 @@ mod tests {
 
     #[test]
     fn topo_sort_no_deps_preserves_all() {
-        let containers = vec![make_container("a"), make_container("b"), make_container("c")];
+        let containers = vec![
+            make_container("a"),
+            make_container("b"),
+            make_container("c"),
+        ];
         let dep_graph = HashMap::new();
         let result = topological_sort(&containers, &dep_graph);
         assert_eq!(result.len(), 3);
@@ -988,6 +1159,156 @@ mod tests {
             Some(vec!["PATH=/usr/bin".to_string(), "HOME=/root".to_string()])
         );
         assert_eq!(run_cfg.hostname, Some("myhost".to_string()));
+    }
+
+    // ── evaluate_startup_state ────────────────────────────────────────────────
+
+    fn make_state(
+        running: bool,
+        status: Option<&str>,
+        exit_code: Option<i64>,
+        health_status: Option<bollard::models::HealthStatusEnum>,
+    ) -> bollard::models::ContainerState {
+        use bollard::models::{ContainerStateStatusEnum, Health};
+        let parsed_status = status.map(|s| match s {
+            "running" => ContainerStateStatusEnum::RUNNING,
+            "exited" => ContainerStateStatusEnum::EXITED,
+            "created" => ContainerStateStatusEnum::CREATED,
+            _ => ContainerStateStatusEnum::EMPTY,
+        });
+        let health = health_status.map(|hs| Health {
+            status: Some(hs),
+            ..Default::default()
+        });
+        bollard::models::ContainerState {
+            running: Some(running),
+            status: parsed_status,
+            exit_code,
+            health,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn eval_running_no_healthcheck_is_ok() {
+        let state = make_state(true, Some("running"), None, None);
+        assert_eq!(evaluate_startup_state(&state, true, true), StartupEval::Ok);
+    }
+
+    #[test]
+    fn eval_running_healthy_is_ok() {
+        let state = make_state(
+            true,
+            Some("running"),
+            None,
+            Some(bollard::models::HealthStatusEnum::HEALTHY),
+        );
+        assert_eq!(evaluate_startup_state(&state, true, true), StartupEval::Ok);
+    }
+
+    #[test]
+    fn eval_running_health_none_is_ok() {
+        let state = make_state(
+            true,
+            Some("running"),
+            None,
+            Some(bollard::models::HealthStatusEnum::NONE),
+        );
+        assert_eq!(evaluate_startup_state(&state, true, true), StartupEval::Ok);
+    }
+
+    #[test]
+    fn eval_running_health_starting_is_continue() {
+        let state = make_state(
+            true,
+            Some("running"),
+            None,
+            Some(bollard::models::HealthStatusEnum::STARTING),
+        );
+        assert_eq!(
+            evaluate_startup_state(&state, true, true),
+            StartupEval::Continue
+        );
+    }
+
+    #[test]
+    fn eval_running_unhealthy_with_on_healthcheck_is_rollback() {
+        let state = make_state(
+            true,
+            Some("running"),
+            None,
+            Some(bollard::models::HealthStatusEnum::UNHEALTHY),
+        );
+        assert_eq!(
+            evaluate_startup_state(&state, true, true),
+            StartupEval::Rollback(RollbackTrigger::HealthcheckFailure)
+        );
+    }
+
+    #[test]
+    fn eval_running_unhealthy_without_on_healthcheck_is_continue() {
+        let state = make_state(
+            true,
+            Some("running"),
+            None,
+            Some(bollard::models::HealthStatusEnum::UNHEALTHY),
+        );
+        // on_healthcheck=false: unhealthy is ignored, but container is running → Ok
+        // (health check NONE/HEALTHY path not taken; UNHEALTHY with on_healthcheck=false falls through to running=true → Ok)
+        assert_eq!(evaluate_startup_state(&state, true, false), StartupEval::Ok);
+    }
+
+    #[test]
+    fn eval_exited_nonzero_with_on_exit_code_is_rollback() {
+        let state = make_state(false, Some("exited"), Some(1), None);
+        assert_eq!(
+            evaluate_startup_state(&state, true, true),
+            StartupEval::Rollback(RollbackTrigger::NonZeroExit(1))
+        );
+    }
+
+    #[test]
+    fn eval_exited_nonzero_without_on_exit_code_is_continue() {
+        let state = make_state(false, Some("exited"), Some(1), None);
+        assert_eq!(
+            evaluate_startup_state(&state, false, true),
+            StartupEval::Continue
+        );
+    }
+
+    #[test]
+    fn eval_exited_zero_is_continue() {
+        let state = make_state(false, Some("exited"), Some(0), None);
+        assert_eq!(
+            evaluate_startup_state(&state, true, true),
+            StartupEval::Continue
+        );
+    }
+
+    // ── RollbackTrigger::reason_str ───────────────────────────────────────────
+
+    #[test]
+    fn trigger_reason_non_zero_exit() {
+        assert_eq!(
+            RollbackTrigger::NonZeroExit(137).reason_str(),
+            "exit_code=137"
+        );
+    }
+
+    #[test]
+    fn trigger_reason_healthcheck() {
+        assert_eq!(
+            RollbackTrigger::HealthcheckFailure.reason_str(),
+            "healthcheck_failed"
+        );
+    }
+
+    #[test]
+    fn trigger_reason_timeout() {
+        assert_eq!(
+            RollbackTrigger::StartupTimeout.reason_str(),
+            "startup_timeout"
+        );
     }
 
     // ── topological_sort — diamond dependency ─────────────────────────────────

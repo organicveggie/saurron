@@ -615,8 +615,7 @@ mod tests {
 
     #[test]
     fn resolve_secret_file_non_path_returns_literal() {
-        let cfg =
-            Config::load(&args(&["--registry-password", "plaintextpassword"])).unwrap();
+        let cfg = Config::load(&args(&["--registry-password", "plaintextpassword"])).unwrap();
         assert_eq!(cfg.registry_password, Some("plaintextpassword".to_string()));
     }
 }
