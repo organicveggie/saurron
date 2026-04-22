@@ -6,17 +6,17 @@ build = "build.rs"
 
 [dependencies]
 anyhow = "1"
-axum = "0.7"
+axum = "0.8"
 chrono = "0.4"
-cron = "0.12"
+cron = "0.16"
 futures = "0.3"
-bollard = { version = "0.17", features = ["ssl"] }
+bollard = { version = "0.20", features = ["ssl"] }
 clap = { version = "4", features = ["derive", "env"] }
-config = { version = "0.14", default-features = false, features = ["toml"] }
+config = { version = "0.15", default-features = false, features = ["toml"] }
 lettre = { version = "0.11", default-features = false }
 minijinja = "2"
 prometheus = "0.14"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
 rumqttc-next = "0.30.0"
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }

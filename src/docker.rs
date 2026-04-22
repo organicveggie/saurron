@@ -314,7 +314,13 @@ fn summary_to_info(s: bollard::models::ContainerSummary) -> Option<ContainerInfo
             .unwrap_or_default(),
         image: s.image.unwrap_or_default(),
         image_id: s.image_id.unwrap_or_default(),
-        state: ContainerState::from_str(s.state.as_deref().unwrap_or("unknown")),
+        state: ContainerState::from_str(
+            s.state
+                .as_ref()
+                .map(|s| s.to_string())
+                .as_deref()
+                .unwrap_or("unknown"),
+        ),
         labels: s.labels.unwrap_or_default(),
     })
 }
@@ -380,7 +386,7 @@ impl DockerClient {
         &self,
         selector: &ContainerSelector,
     ) -> Result<Vec<ContainerInfo>> {
-        use bollard::container::ListContainersOptions;
+        use bollard::query_parameters::ListContainersOptionsBuilder;
         let status_filter: Vec<String> = selector
             .state_filter()
             .iter()
@@ -388,11 +394,10 @@ impl DockerClient {
             .collect();
         let mut filters = HashMap::new();
         filters.insert("status".to_string(), status_filter);
-        let opts = ListContainersOptions {
-            all: true,
-            filters,
-            ..Default::default()
-        };
+        let opts = ListContainersOptionsBuilder::new()
+            .all(true)
+            .filters(&filters)
+            .build();
         let summaries = self
             .inner
             .list_containers(Some(opts))
@@ -443,7 +448,7 @@ impl DockerClient {
         credentials: Option<(String, String)>,
     ) -> Result<()> {
         use bollard::auth::DockerCredentials;
-        use bollard::image::CreateImageOptions;
+        use bollard::query_parameters::CreateImageOptionsBuilder;
         use futures::TryStreamExt as _;
 
         let creds = credentials.map(|(username, password)| DockerCredentials {
@@ -451,10 +456,7 @@ impl DockerClient {
             password: Some(password),
             ..Default::default()
         });
-        let opts = CreateImageOptions {
-            from_image: image,
-            ..Default::default()
-        };
+        let opts = CreateImageOptionsBuilder::new().from_image(image).build();
         let mut stream = self.inner.create_image(Some(opts), None, creds);
         while let Some(info) = stream
             .try_next()
@@ -464,18 +466,20 @@ impl DockerClient {
             if let Some(status) = &info.status {
                 tracing::trace!(image, status, "pull progress");
             }
-            if let Some(err) = &info.error {
-                anyhow::bail!("pull failed for '{}': {}", image, err);
+            if let Some(err) = &info.error_detail {
+                let msg = err.message.as_deref().unwrap_or("unknown error");
+                anyhow::bail!("pull failed for '{}': {}", image, msg);
             }
         }
         Ok(())
     }
 
     pub async fn stop_container(&self, id: &str, timeout_secs: i64) -> Result<()> {
-        use bollard::container::StopContainerOptions;
-        match self
-            .inner
-            .stop_container(id, Some(StopContainerOptions { t: timeout_secs }))
+        use bollard::query_parameters::StopContainerOptionsBuilder;
+        let opts = StopContainerOptionsBuilder::new()
+            .t(timeout_secs as i32)
+            .build();
+        match self.inner.stop_container(id, Some(opts))
             .await
         {
             Ok(()) => Ok(()),
@@ -490,15 +494,11 @@ impl DockerClient {
     }
 
     pub async fn remove_container(&self, id: &str) -> Result<()> {
-        use bollard::container::RemoveContainerOptions;
+        use bollard::query_parameters::RemoveContainerOptionsBuilder;
         self.inner
             .remove_container(
                 id,
-                Some(RemoveContainerOptions {
-                    force: false,
-                    v: false,
-                    link: false,
-                }),
+                Some(RemoveContainerOptionsBuilder::new().build()),
             )
             .await
             .with_context(|| format!("failed to remove container '{id}'"))
@@ -507,16 +507,13 @@ impl DockerClient {
     pub async fn create_container(
         &self,
         name: &str,
-        config: bollard::container::Config<String>,
+        config: bollard::models::ContainerCreateBody,
     ) -> Result<String> {
-        use bollard::container::CreateContainerOptions;
+        use bollard::query_parameters::CreateContainerOptionsBuilder;
         let resp = self
             .inner
             .create_container(
-                Some(CreateContainerOptions {
-                    name,
-                    platform: None,
-                }),
+                Some(CreateContainerOptionsBuilder::new().name(name).build()),
                 config,
             )
             .await
@@ -528,21 +525,18 @@ impl DockerClient {
         self.inner
             .start_container(
                 id,
-                None::<bollard::container::StartContainerOptions<String>>,
+                None::<bollard::query_parameters::StartContainerOptions>,
             )
             .await
             .with_context(|| format!("failed to start container '{id}'"))
     }
 
     pub async fn remove_image(&self, image: &str) -> Result<()> {
-        use bollard::image::RemoveImageOptions;
+        use bollard::query_parameters::RemoveImageOptionsBuilder;
         self.inner
             .remove_image(
                 image,
-                Some(RemoveImageOptions {
-                    force: false,
-                    noprune: false,
-                }),
+                Some(RemoveImageOptionsBuilder::new().build()),
                 None,
             )
             .await

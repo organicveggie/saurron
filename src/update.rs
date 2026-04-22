@@ -47,7 +47,7 @@ pub struct ContainerRunConfig {
     pub open_stdin: Option<bool>,
     pub stop_signal: Option<String>,
     pub labels: Option<HashMap<String, String>>,
-    pub exposed_ports: Option<HashMap<String, HashMap<(), ()>>>,
+    pub exposed_ports: Option<Vec<String>>,
     // from ContainerInspectResponse.host_config
     pub binds: Option<Vec<String>>,
     pub volumes_from: Option<Vec<String>>,
@@ -109,12 +109,13 @@ fn build_create_config(
     run_cfg: &ContainerRunConfig,
     new_image: &str,
     stop_signal_override: Option<&str>,
-) -> bollard::container::Config<String> {
-    use bollard::container::NetworkingConfig;
-
-    let networking_config = run_cfg.networks.as_ref().map(|nets| NetworkingConfig {
-        endpoints_config: nets.clone(),
-    });
+) -> bollard::models::ContainerCreateBody {
+    let networking_config = run_cfg
+        .networks
+        .as_ref()
+        .map(|nets| bollard::models::NetworkingConfig {
+            endpoints_config: Some(nets.clone()),
+        });
 
     let host_config = Some(bollard::models::HostConfig {
         binds: run_cfg.binds.clone(),
@@ -139,7 +140,7 @@ fn build_create_config(
         .map(|s| s.to_string())
         .or_else(|| run_cfg.stop_signal.clone());
 
-    bollard::container::Config {
+    bollard::models::ContainerCreateBody {
         hostname: run_cfg.hostname.clone(),
         domainname: run_cfg.domainname.clone(),
         user: run_cfg.user.clone(),
