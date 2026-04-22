@@ -479,9 +479,7 @@ impl DockerClient {
         let opts = StopContainerOptionsBuilder::new()
             .t(timeout_secs as i32)
             .build();
-        match self.inner.stop_container(id, Some(opts))
-            .await
-        {
+        match self.inner.stop_container(id, Some(opts)).await {
             Ok(()) => Ok(()),
             // 304 = container already stopped; treat as success
             Err(bollard::errors::Error::DockerResponseServerError {
@@ -496,10 +494,7 @@ impl DockerClient {
     pub async fn remove_container(&self, id: &str) -> Result<()> {
         use bollard::query_parameters::RemoveContainerOptionsBuilder;
         self.inner
-            .remove_container(
-                id,
-                Some(RemoveContainerOptionsBuilder::new().build()),
-            )
+            .remove_container(id, Some(RemoveContainerOptionsBuilder::new().build()))
             .await
             .with_context(|| format!("failed to remove container '{id}'"))
     }
@@ -523,22 +518,26 @@ impl DockerClient {
 
     pub async fn start_container(&self, id: &str) -> Result<()> {
         self.inner
-            .start_container(
-                id,
-                None::<bollard::query_parameters::StartContainerOptions>,
-            )
+            .start_container(id, None::<bollard::query_parameters::StartContainerOptions>)
             .await
             .with_context(|| format!("failed to start container '{id}'"))
+    }
+
+    pub async fn rename_container(&self, id: &str, new_name: &str) -> Result<()> {
+        use bollard::query_parameters::RenameContainerOptionsBuilder;
+        self.inner
+            .rename_container(
+                id,
+                RenameContainerOptionsBuilder::new().name(new_name).build(),
+            )
+            .await
+            .with_context(|| format!("failed to rename container '{id}' to '{new_name}'"))
     }
 
     pub async fn remove_image(&self, image: &str) -> Result<()> {
         use bollard::query_parameters::RemoveImageOptionsBuilder;
         self.inner
-            .remove_image(
-                image,
-                Some(RemoveImageOptionsBuilder::new().build()),
-                None,
-            )
+            .remove_image(image, Some(RemoveImageOptionsBuilder::new().build()), None)
             .await
             .with_context(|| format!("failed to remove image '{image}'"))?;
         Ok(())

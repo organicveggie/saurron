@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use anyhow::Result;
 use tracing::{debug, info, warn};
 
-use crate::{audit, config, docker, registry};
+use crate::{audit, config, docker, registry, selfupdate};
 
 // ── Duration parser ───────────────────────────────────────────────────────────
 
@@ -110,12 +110,13 @@ fn build_create_config(
     new_image: &str,
     stop_signal_override: Option<&str>,
 ) -> bollard::models::ContainerCreateBody {
-    let networking_config = run_cfg
-        .networks
-        .as_ref()
-        .map(|nets| bollard::models::NetworkingConfig {
-            endpoints_config: Some(nets.clone()),
-        });
+    let networking_config =
+        run_cfg
+            .networks
+            .as_ref()
+            .map(|nets| bollard::models::NetworkingConfig {
+                endpoints_config: Some(nets.clone()),
+            });
 
     let host_config = Some(bollard::models::HostConfig {
         binds: run_cfg.binds.clone(),
@@ -476,6 +477,7 @@ impl<'a> UpdateEngine<'a> {
 
     pub async fn run_cycle(&self, containers: &[docker::ContainerInfo]) -> SessionReport {
         let mut report = SessionReport::default();
+        let own_id = selfupdate::detect_own_container_id();
 
         // Phase A: scan all containers for staleness
         let mut stale: Vec<(docker::ContainerInfo, registry::StaleInfo)> = Vec::new();
@@ -537,7 +539,10 @@ impl<'a> UpdateEngine<'a> {
             .map(|(c, info)| (c.name, info))
             .collect();
 
-        // Phase D: update each stale container in dependency order
+        // Phase D: update each stale container in dependency order.
+        // Self-container (if detected) is deferred to after all others.
+        let mut self_update_queue: Vec<&docker::ContainerInfo> = Vec::new();
+
         for container in &ordered {
             let Some(stale_info) = stale_map.get(&container.name) else {
                 continue;
@@ -545,6 +550,17 @@ impl<'a> UpdateEngine<'a> {
             let Some(inspect) = inspect_map.get(&container.name) else {
                 continue;
             };
+
+            // Defer self-container to the end so other containers update first
+            if own_id
+                .as_deref()
+                .is_some_and(|oid| selfupdate::is_self_container(&container.id, oid))
+            {
+                info!(container = %container.name, "deferring self-update to end of cycle");
+                self_update_queue.push(container);
+                continue;
+            }
+
             let result = self.update_one(container, stale_info, inspect).await;
             match &result {
                 UpdateResult::Failed(e) => {
@@ -554,6 +570,22 @@ impl<'a> UpdateEngine<'a> {
                     warn!(container = %container.name, reason, "update rolled back");
                 }
                 _ => {}
+            }
+            report.record(&container.name, &result);
+        }
+
+        // Phase D2: self-update (runs last)
+        for container in &self_update_queue {
+            let Some(stale_info) = stale_map.get(&container.name) else {
+                continue;
+            };
+            let Some(inspect) = inspect_map.get(&container.name) else {
+                continue;
+            };
+            info!(container = %container.name, "beginning self-update");
+            let result = self.self_update_one(container, stale_info, inspect).await;
+            if let UpdateResult::Failed(ref e) = result {
+                warn!(container = %container.name, error = %e, "self-update failed");
             }
             report.record(&container.name, &result);
         }
@@ -824,6 +856,194 @@ impl<'a> UpdateEngine<'a> {
                 );
             }
         }
+
+        UpdateResult::Updated {
+            old_image,
+            old_digest,
+            new_image: stale_info.new_image.clone(),
+            new_digest,
+        }
+    }
+
+    /// Self-update path: rename own container to a temp name, start replacement
+    /// under the original name, monitor it. On failure, rename self back.
+    async fn self_update_one(
+        &self,
+        container: &docker::ContainerInfo,
+        stale_info: &registry::StaleInfo,
+        inspect: &bollard::models::ContainerInspectResponse,
+    ) -> UpdateResult {
+        let labels = container.saurron_labels();
+        let cfg = self.config;
+
+        let effective_monitor_only = resolve_bool_override(
+            cfg.monitor_only,
+            cfg.global_takes_precedence,
+            labels.monitor_only,
+        );
+        let effective_no_pull =
+            resolve_bool_override(cfg.no_pull, cfg.global_takes_precedence, labels.no_pull);
+        let effective_stop_signal: Option<String> = labels.stop_signal.clone();
+
+        if effective_monitor_only {
+            info!(
+                container = %container.name,
+                new_image = %stale_info.new_image,
+                "monitor-only: skipping self-update"
+            );
+            return UpdateResult::Skipped("monitor-only".to_string());
+        }
+
+        let old_image = container.image.clone();
+        let old_digest = stale_info.current_digest.clone();
+
+        // Step 1: pull new image
+        if !effective_no_pull {
+            info!(container = %container.name, image = %stale_info.new_image, "pulling new image for self-update");
+            if let Err(e) = self
+                .docker
+                .pull_image(&stale_info.new_image, self.credentials.clone())
+                .await
+            {
+                return UpdateResult::Failed(e.context(format!(
+                    "self-update pull failed for '{}'",
+                    stale_info.new_image
+                )));
+            }
+        }
+
+        // Step 2: get new digest
+        let new_digest = match self
+            .docker
+            .get_local_image_info(&stale_info.new_image)
+            .await
+        {
+            Ok(info) => info.digest.unwrap_or_else(|| stale_info.new_digest.clone()),
+            Err(_) => stale_info.new_digest.clone(),
+        };
+
+        // Step 3: extract run config
+        let run_cfg = extract_run_config(inspect);
+
+        // Step 4: rename self to temp name (freeing our original name)
+        let temp_name = selfupdate::temp_container_name(&container.name);
+        info!(
+            container = %container.name,
+            temp_name = %temp_name,
+            "renaming self for self-update"
+        );
+        if let Err(e) = self
+            .docker
+            .rename_container(&container.id, &temp_name)
+            .await
+        {
+            return UpdateResult::Failed(e.context(format!(
+                "self-update rename failed for '{}'",
+                container.name
+            )));
+        }
+
+        // Step 5: create new container under original name
+        let create_cfg = build_create_config(
+            &run_cfg,
+            &stale_info.new_image,
+            effective_stop_signal.as_deref(),
+        );
+        info!(
+            container = %container.name,
+            new_image = %stale_info.new_image,
+            "creating self-update replacement container"
+        );
+        let new_id = match self
+            .docker
+            .create_container(&container.name, create_cfg)
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                // Rename self back on failure
+                let _ = self
+                    .docker
+                    .rename_container(&container.id, &container.name)
+                    .await;
+                return UpdateResult::Failed(e.context(format!(
+                    "self-update create failed for '{}'",
+                    container.name
+                )));
+            }
+        };
+
+        // Step 6: start new container
+        if let Err(e) = self.docker.start_container(&new_id).await {
+            let _ = self.docker.remove_container(&new_id).await;
+            let _ = self
+                .docker
+                .rename_container(&container.id, &container.name)
+                .await;
+            return UpdateResult::Failed(
+                e.context(format!("self-update start failed for '{}'", container.name)),
+            );
+        }
+
+        // Step 7: monitor startup
+        let startup_timeout = parse_duration_secs(&cfg.rollback.startup_timeout).unwrap_or(30);
+        match monitor_startup(
+            self.docker,
+            &container.name,
+            &new_id,
+            startup_timeout,
+            cfg.rollback.on_exit_code,
+            cfg.rollback.on_healthcheck,
+            cfg.rollback.on_timeout,
+        )
+        .await
+        {
+            Ok(()) => {
+                info!(
+                    container = %container.name,
+                    new_id = %new_id,
+                    "self-update replacement started successfully; current process will exit"
+                );
+            }
+            Err(trigger) => {
+                let reason = trigger.reason_str();
+                warn!(
+                    container = %container.name,
+                    new_id = %new_id,
+                    reason,
+                    "self-update replacement failed startup — restoring old container"
+                );
+                // Stop and remove failed replacement
+                let _ = self.docker.stop_container(&new_id, 10).await;
+                let _ = self.docker.remove_container(&new_id).await;
+                // Rename self back to original name
+                if let Err(e) = self
+                    .docker
+                    .rename_container(&container.id, &container.name)
+                    .await
+                {
+                    return UpdateResult::Failed(e.context(format!(
+                        "self-update recovery rename failed for '{}': could not restore original name",
+                        container.name
+                    )));
+                }
+                return UpdateResult::Failed(anyhow::anyhow!(
+                    "self-update failed ({}); old container restored as '{}'",
+                    reason,
+                    container.name
+                ));
+            }
+        }
+
+        // Step 8: audit
+        audit::audit_update(
+            &container.name,
+            &new_id,
+            &old_image,
+            &old_digest,
+            &stale_info.new_image,
+            &new_digest,
+        );
 
         UpdateResult::Updated {
             old_image,
