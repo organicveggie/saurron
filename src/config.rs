@@ -720,4 +720,74 @@ mod tests {
         let wh = cfg.notifications.webhook.expect("webhook should be Some");
         assert_eq!(wh.url, "https://secret-hook.example.com/hook");
     }
+
+    #[test]
+    fn http_api_token_resolves_literal() {
+        let cfg = Config::load(&args(&["--http-api-token", "mytoken"])).unwrap();
+        assert_eq!(cfg.http_api.token, Some("mytoken".to_string()));
+    }
+
+    #[test]
+    fn notification_template_resolves_literal() {
+        let cfg =
+            Config::load(&args(&["--notification-template", "Updated: {{name}}"])).unwrap();
+        assert_eq!(
+            cfg.notifications.general.template,
+            Some("Updated: {{name}}".to_string())
+        );
+    }
+
+    #[test]
+    fn webhook_headers_resolves_literal() {
+        let cfg = Config::load(&args(&[
+            "--webhook-url",
+            "https://example.com/hook",
+            "--webhook-headers",
+            "X-Token:abc123",
+        ]))
+        .unwrap();
+        let wh = cfg.notifications.webhook.unwrap();
+        assert_eq!(wh.headers, Some("X-Token:abc123".to_string()));
+    }
+
+    #[test]
+    fn email_with_auth_credentials() {
+        let cfg = Config::load(&args(&[
+            "--notification-email-from",
+            "from@example.com",
+            "--notification-email-to",
+            "to@example.com",
+            "--notification-email-server",
+            "smtp.example.com",
+            "--notification-email-user",
+            "user@example.com",
+            "--notification-email-password",
+            "s3cr3t",
+        ]))
+        .unwrap();
+        let email = cfg.notifications.email.unwrap();
+        assert_eq!(email.user, Some("user@example.com".to_string()));
+        assert_eq!(email.password, Some("s3cr3t".to_string()));
+    }
+
+    #[test]
+    fn mqtt_with_optional_fields() {
+        let cfg = Config::load(&args(&[
+            "--notification-mqtt-broker",
+            "tcp://broker.example.com:1883",
+            "--notification-mqtt-topic",
+            "saurron/updates",
+            "--notification-mqtt-client-id",
+            "client-1",
+            "--notification-mqtt-username",
+            "mqttuser",
+            "--notification-mqtt-password",
+            "mqttpass",
+        ]))
+        .unwrap();
+        let mqtt = cfg.notifications.mqtt.unwrap();
+        assert_eq!(mqtt.client_id, Some("client-1".to_string()));
+        assert_eq!(mqtt.username, Some("mqttuser".to_string()));
+        assert_eq!(mqtt.password, Some("mqttpass".to_string()));
+    }
 }

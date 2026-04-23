@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use anyhow::Result;
 use tracing::{debug, info, warn};
 
-use crate::{audit, config, docker, registry};
+use crate::{audit, config, docker, registry, selfupdate};
 
 // ── Duration parser ───────────────────────────────────────────────────────────
 
@@ -110,12 +110,13 @@ fn build_create_config(
     new_image: &str,
     stop_signal_override: Option<&str>,
 ) -> bollard::models::ContainerCreateBody {
-    let networking_config = run_cfg
-        .networks
-        .as_ref()
-        .map(|nets| bollard::models::NetworkingConfig {
-            endpoints_config: Some(nets.clone()),
-        });
+    let networking_config =
+        run_cfg
+            .networks
+            .as_ref()
+            .map(|nets| bollard::models::NetworkingConfig {
+                endpoints_config: Some(nets.clone()),
+            });
 
     let host_config = Some(bollard::models::HostConfig {
         binds: run_cfg.binds.clone(),
@@ -476,6 +477,7 @@ impl<'a> UpdateEngine<'a> {
 
     pub async fn run_cycle(&self, containers: &[docker::ContainerInfo]) -> SessionReport {
         let mut report = SessionReport::default();
+        let own_id = selfupdate::detect_own_container_id();
 
         // Phase A: scan all containers for staleness
         let mut stale: Vec<(docker::ContainerInfo, registry::StaleInfo)> = Vec::new();
@@ -537,7 +539,10 @@ impl<'a> UpdateEngine<'a> {
             .map(|(c, info)| (c.name, info))
             .collect();
 
-        // Phase D: update each stale container in dependency order
+        // Phase D: update each stale container in dependency order.
+        // Self-container (if detected) is deferred to after all others.
+        let mut self_update_queue: Vec<&docker::ContainerInfo> = Vec::new();
+
         for container in &ordered {
             let Some(stale_info) = stale_map.get(&container.name) else {
                 continue;
@@ -545,6 +550,17 @@ impl<'a> UpdateEngine<'a> {
             let Some(inspect) = inspect_map.get(&container.name) else {
                 continue;
             };
+
+            // Defer self-container to the end so other containers update first
+            if own_id
+                .as_deref()
+                .is_some_and(|oid| selfupdate::is_self_container(&container.id, oid))
+            {
+                info!(container = %container.name, "deferring self-update to end of cycle");
+                self_update_queue.push(container);
+                continue;
+            }
+
             let result = self.update_one(container, stale_info, inspect).await;
             match &result {
                 UpdateResult::Failed(e) => {
@@ -554,6 +570,22 @@ impl<'a> UpdateEngine<'a> {
                     warn!(container = %container.name, reason, "update rolled back");
                 }
                 _ => {}
+            }
+            report.record(&container.name, &result);
+        }
+
+        // Phase D2: self-update (runs last)
+        for container in &self_update_queue {
+            let Some(stale_info) = stale_map.get(&container.name) else {
+                continue;
+            };
+            let Some(inspect) = inspect_map.get(&container.name) else {
+                continue;
+            };
+            info!(container = %container.name, "beginning self-update");
+            let result = self.self_update_one(container, stale_info, inspect).await;
+            if let UpdateResult::Failed(ref e) = result {
+                warn!(container = %container.name, error = %e, "self-update failed");
             }
             report.record(&container.name, &result);
         }
@@ -824,6 +856,194 @@ impl<'a> UpdateEngine<'a> {
                 );
             }
         }
+
+        UpdateResult::Updated {
+            old_image,
+            old_digest,
+            new_image: stale_info.new_image.clone(),
+            new_digest,
+        }
+    }
+
+    /// Self-update path: rename own container to a temp name, start replacement
+    /// under the original name, monitor it. On failure, rename self back.
+    async fn self_update_one(
+        &self,
+        container: &docker::ContainerInfo,
+        stale_info: &registry::StaleInfo,
+        inspect: &bollard::models::ContainerInspectResponse,
+    ) -> UpdateResult {
+        let labels = container.saurron_labels();
+        let cfg = self.config;
+
+        let effective_monitor_only = resolve_bool_override(
+            cfg.monitor_only,
+            cfg.global_takes_precedence,
+            labels.monitor_only,
+        );
+        let effective_no_pull =
+            resolve_bool_override(cfg.no_pull, cfg.global_takes_precedence, labels.no_pull);
+        let effective_stop_signal: Option<String> = labels.stop_signal.clone();
+
+        if effective_monitor_only {
+            info!(
+                container = %container.name,
+                new_image = %stale_info.new_image,
+                "monitor-only: skipping self-update"
+            );
+            return UpdateResult::Skipped("monitor-only".to_string());
+        }
+
+        let old_image = container.image.clone();
+        let old_digest = stale_info.current_digest.clone();
+
+        // Step 1: pull new image
+        if !effective_no_pull {
+            info!(container = %container.name, image = %stale_info.new_image, "pulling new image for self-update");
+            if let Err(e) = self
+                .docker
+                .pull_image(&stale_info.new_image, self.credentials.clone())
+                .await
+            {
+                return UpdateResult::Failed(e.context(format!(
+                    "self-update pull failed for '{}'",
+                    stale_info.new_image
+                )));
+            }
+        }
+
+        // Step 2: get new digest
+        let new_digest = match self
+            .docker
+            .get_local_image_info(&stale_info.new_image)
+            .await
+        {
+            Ok(info) => info.digest.unwrap_or_else(|| stale_info.new_digest.clone()),
+            Err(_) => stale_info.new_digest.clone(),
+        };
+
+        // Step 3: extract run config
+        let run_cfg = extract_run_config(inspect);
+
+        // Step 4: rename self to temp name (freeing our original name)
+        let temp_name = selfupdate::temp_container_name(&container.name);
+        info!(
+            container = %container.name,
+            temp_name = %temp_name,
+            "renaming self for self-update"
+        );
+        if let Err(e) = self
+            .docker
+            .rename_container(&container.id, &temp_name)
+            .await
+        {
+            return UpdateResult::Failed(e.context(format!(
+                "self-update rename failed for '{}'",
+                container.name
+            )));
+        }
+
+        // Step 5: create new container under original name
+        let create_cfg = build_create_config(
+            &run_cfg,
+            &stale_info.new_image,
+            effective_stop_signal.as_deref(),
+        );
+        info!(
+            container = %container.name,
+            new_image = %stale_info.new_image,
+            "creating self-update replacement container"
+        );
+        let new_id = match self
+            .docker
+            .create_container(&container.name, create_cfg)
+            .await
+        {
+            Ok(id) => id,
+            Err(e) => {
+                // Rename self back on failure
+                let _ = self
+                    .docker
+                    .rename_container(&container.id, &container.name)
+                    .await;
+                return UpdateResult::Failed(e.context(format!(
+                    "self-update create failed for '{}'",
+                    container.name
+                )));
+            }
+        };
+
+        // Step 6: start new container
+        if let Err(e) = self.docker.start_container(&new_id).await {
+            let _ = self.docker.remove_container(&new_id).await;
+            let _ = self
+                .docker
+                .rename_container(&container.id, &container.name)
+                .await;
+            return UpdateResult::Failed(
+                e.context(format!("self-update start failed for '{}'", container.name)),
+            );
+        }
+
+        // Step 7: monitor startup
+        let startup_timeout = parse_duration_secs(&cfg.rollback.startup_timeout).unwrap_or(30);
+        match monitor_startup(
+            self.docker,
+            &container.name,
+            &new_id,
+            startup_timeout,
+            cfg.rollback.on_exit_code,
+            cfg.rollback.on_healthcheck,
+            cfg.rollback.on_timeout,
+        )
+        .await
+        {
+            Ok(()) => {
+                info!(
+                    container = %container.name,
+                    new_id = %new_id,
+                    "self-update replacement started successfully; current process will exit"
+                );
+            }
+            Err(trigger) => {
+                let reason = trigger.reason_str();
+                warn!(
+                    container = %container.name,
+                    new_id = %new_id,
+                    reason,
+                    "self-update replacement failed startup — restoring old container"
+                );
+                // Stop and remove failed replacement
+                let _ = self.docker.stop_container(&new_id, 10).await;
+                let _ = self.docker.remove_container(&new_id).await;
+                // Rename self back to original name
+                if let Err(e) = self
+                    .docker
+                    .rename_container(&container.id, &container.name)
+                    .await
+                {
+                    return UpdateResult::Failed(e.context(format!(
+                        "self-update recovery rename failed for '{}': could not restore original name",
+                        container.name
+                    )));
+                }
+                return UpdateResult::Failed(anyhow::anyhow!(
+                    "self-update failed ({}); old container restored as '{}'",
+                    reason,
+                    container.name
+                ));
+            }
+        }
+
+        // Step 8: audit
+        audit::audit_update(
+            &container.name,
+            &new_id,
+            &old_image,
+            &old_digest,
+            &stale_info.new_image,
+            &new_digest,
+        );
 
         UpdateResult::Updated {
             old_image,
@@ -1335,5 +1555,205 @@ mod tests {
         assert!(pos("a") < pos("c"));
         assert!(pos("b") < pos("d"));
         assert!(pos("c") < pos("d"));
+    }
+
+    // ── extract_run_config — host_config fields ───────────────────────────────
+
+    #[test]
+    fn extract_run_config_copies_host_config_fields() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                binds: Some(vec!["/data:/data:ro".to_string()]),
+                network_mode: Some("bridge".to_string()),
+                privileged: Some(true),
+                cap_add: Some(vec!["NET_ADMIN".to_string()]),
+                cap_drop: Some(vec!["ALL".to_string()]),
+                extra_hosts: Some(vec!["host.docker.internal:host-gateway".to_string()]),
+                shm_size: Some(67_108_864),
+                init: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(run_cfg.binds, Some(vec!["/data:/data:ro".to_string()]));
+        assert_eq!(run_cfg.network_mode, Some("bridge".to_string()));
+        assert_eq!(run_cfg.privileged, Some(true));
+        assert_eq!(run_cfg.cap_add, Some(vec!["NET_ADMIN".to_string()]));
+        assert_eq!(run_cfg.cap_drop, Some(vec!["ALL".to_string()]));
+        assert_eq!(
+            run_cfg.extra_hosts,
+            Some(vec!["host.docker.internal:host-gateway".to_string()])
+        );
+        assert_eq!(run_cfg.shm_size, Some(67_108_864));
+        assert_eq!(run_cfg.init, Some(true));
+    }
+
+    #[test]
+    fn extract_run_config_copies_volumes_from_and_links() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                volumes_from: Some(vec!["data-container".to_string()]),
+                links: Some(vec!["/redis:/app/redis".to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(
+            run_cfg.volumes_from,
+            Some(vec!["data-container".to_string()])
+        );
+        assert!(run_cfg.links.is_some());
+    }
+
+    // ── extract_run_config — network_settings ─────────────────────────────────
+
+    #[test]
+    fn extract_run_config_copies_network_settings() {
+        let mut networks = HashMap::new();
+        networks.insert(
+            "mynet".to_string(),
+            bollard::models::EndpointSettings::default(),
+        );
+        let inspect = bollard::models::ContainerInspectResponse {
+            network_settings: Some(bollard::models::NetworkSettings {
+                networks: Some(networks),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert!(run_cfg.networks.as_ref().unwrap().contains_key("mynet"));
+    }
+
+    // ── build_create_config — networking branch ───────────────────────────────
+
+    #[test]
+    fn build_create_config_with_networking_config() {
+        let mut run_cfg = default_run_cfg();
+        let mut networks = HashMap::new();
+        networks.insert(
+            "mynet".to_string(),
+            bollard::models::EndpointSettings::default(),
+        );
+        run_cfg.networks = Some(networks);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let nc = cfg.networking_config.unwrap();
+        assert!(nc.endpoints_config.unwrap().contains_key("mynet"));
+    }
+
+    #[test]
+    fn build_create_config_copies_host_config_fields() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.binds = Some(vec!["/data:/data:ro".to_string()]);
+        run_cfg.cap_add = Some(vec!["NET_ADMIN".to_string()]);
+        run_cfg.privileged = Some(true);
+        run_cfg.shm_size = Some(67_108_864);
+        run_cfg.init = Some(true);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let hc = cfg.host_config.unwrap();
+        assert_eq!(hc.binds, Some(vec!["/data:/data:ro".to_string()]));
+        assert_eq!(hc.cap_add, Some(vec!["NET_ADMIN".to_string()]));
+        assert_eq!(hc.privileged, Some(true));
+        assert_eq!(hc.shm_size, Some(67_108_864));
+        assert_eq!(hc.init, Some(true));
+    }
+
+    // ── SessionReport::record ─────────────────────────────────────────────────
+
+    #[test]
+    fn session_report_records_updated() {
+        let mut report = SessionReport::default();
+        report.record(
+            "nginx",
+            &UpdateResult::Updated {
+                old_image: "nginx:1.0".to_string(),
+                old_digest: "sha256:aaa".to_string(),
+                new_image: "nginx:2.0".to_string(),
+                new_digest: "sha256:bbb".to_string(),
+            },
+        );
+        assert_eq!(report.updated, vec!["nginx"]);
+        assert_eq!(report.up_to_date, 0);
+    }
+
+    #[test]
+    fn session_report_records_skipped() {
+        let mut report = SessionReport::default();
+        report.record("nginx", &UpdateResult::Skipped("monitor_only".to_string()));
+        assert_eq!(report.skipped, vec!["nginx"]);
+    }
+
+    #[test]
+    fn session_report_records_failed() {
+        let mut report = SessionReport::default();
+        report.record("nginx", &UpdateResult::Failed(anyhow::anyhow!("oops")));
+        assert_eq!(report.failed, vec!["nginx"]);
+    }
+
+    #[test]
+    fn session_report_records_rolled_back() {
+        let mut report = SessionReport::default();
+        report.record(
+            "nginx",
+            &UpdateResult::RolledBack {
+                old_image: "nginx:1.0".to_string(),
+                old_digest: "sha256:aaa".to_string(),
+                attempted_image: "nginx:2.0".to_string(),
+                attempted_digest: "sha256:bbb".to_string(),
+                reason: "healthcheck_failed".to_string(),
+            },
+        );
+        assert_eq!(report.rolled_back, vec!["nginx"]);
+    }
+
+    #[test]
+    fn session_report_records_up_to_date() {
+        let mut report = SessionReport::default();
+        report.record("nginx", &UpdateResult::UpToDate);
+        assert_eq!(report.up_to_date, 1);
+        assert!(report.updated.is_empty());
+    }
+
+    // ── build_dependency_graph — Docker --link ────────────────────────────────
+
+    #[test]
+    fn dep_graph_docker_link_in_set() {
+        let containers = vec![make_container("app"), make_container("redis")];
+        let mut inspect_map: HashMap<String, bollard::models::ContainerInspectResponse> =
+            HashMap::new();
+        inspect_map.insert(
+            "app".to_string(),
+            bollard::models::ContainerInspectResponse {
+                host_config: Some(bollard::models::HostConfig {
+                    links: Some(vec!["/redis:/app/redis".to_string()]),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        let graph = build_dependency_graph(&containers, &inspect_map);
+        assert!(graph["app"].contains(&"redis".to_string()));
+        assert!(graph["redis"].is_empty());
+    }
+
+    #[test]
+    fn dep_graph_docker_link_outside_set_ignored() {
+        let containers = vec![make_container("app")];
+        let mut inspect_map: HashMap<String, bollard::models::ContainerInspectResponse> =
+            HashMap::new();
+        inspect_map.insert(
+            "app".to_string(),
+            bollard::models::ContainerInspectResponse {
+                host_config: Some(bollard::models::HostConfig {
+                    links: Some(vec!["/external:/app/ext".to_string()]),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        );
+        let graph = build_dependency_graph(&containers, &inspect_map);
+        assert!(graph["app"].is_empty());
     }
 }

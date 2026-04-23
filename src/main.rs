@@ -5,6 +5,7 @@ mod docker;
 mod http;
 mod registry;
 mod scheduler;
+mod selfupdate;
 mod update;
 
 use std::sync::Arc;
@@ -86,6 +87,24 @@ fn init_tracing(
         .init();
 
     Ok(guard)
+}
+
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{SignalKind, signal};
+        let mut sigterm =
+            signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+        tokio::select! {
+            _ = sigterm.recv() => { tracing::info!("SIGTERM received"); }
+            _ = tokio::signal::ctrl_c() => { tracing::info!("SIGINT received"); }
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        tokio::signal::ctrl_c().await.ok();
+        tracing::info!("shutdown signal received");
+    }
 }
 
 #[tokio::main]
@@ -173,11 +192,23 @@ async fn main() -> anyhow::Result<()> {
 
     if http_enabled {
         tokio::select! {
-            result = http::start_server(state) => { result?; }
+            result = http::start_server(Arc::clone(&state)) => { result?; }
             _ = scheduler_task => {}
+            _ = shutdown_signal() => {
+                info!("Shutdown signal received; waiting for active update cycle to complete");
+                let _ = state.update_lock.lock().await;
+                info!("Graceful shutdown complete");
+            }
         }
     } else {
-        scheduler_task.await.ok();
+        tokio::select! {
+            _ = scheduler_task => {}
+            _ = shutdown_signal() => {
+                info!("Shutdown signal received; waiting for active update cycle to complete");
+                let _ = state.update_lock.lock().await;
+                info!("Graceful shutdown complete");
+            }
+        }
     }
 
     Ok(())

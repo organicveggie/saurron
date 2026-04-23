@@ -479,9 +479,7 @@ impl DockerClient {
         let opts = StopContainerOptionsBuilder::new()
             .t(timeout_secs as i32)
             .build();
-        match self.inner.stop_container(id, Some(opts))
-            .await
-        {
+        match self.inner.stop_container(id, Some(opts)).await {
             Ok(()) => Ok(()),
             // 304 = container already stopped; treat as success
             Err(bollard::errors::Error::DockerResponseServerError {
@@ -496,10 +494,7 @@ impl DockerClient {
     pub async fn remove_container(&self, id: &str) -> Result<()> {
         use bollard::query_parameters::RemoveContainerOptionsBuilder;
         self.inner
-            .remove_container(
-                id,
-                Some(RemoveContainerOptionsBuilder::new().build()),
-            )
+            .remove_container(id, Some(RemoveContainerOptionsBuilder::new().build()))
             .await
             .with_context(|| format!("failed to remove container '{id}'"))
     }
@@ -523,22 +518,26 @@ impl DockerClient {
 
     pub async fn start_container(&self, id: &str) -> Result<()> {
         self.inner
-            .start_container(
-                id,
-                None::<bollard::query_parameters::StartContainerOptions>,
-            )
+            .start_container(id, None::<bollard::query_parameters::StartContainerOptions>)
             .await
             .with_context(|| format!("failed to start container '{id}'"))
+    }
+
+    pub async fn rename_container(&self, id: &str, new_name: &str) -> Result<()> {
+        use bollard::query_parameters::RenameContainerOptionsBuilder;
+        self.inner
+            .rename_container(
+                id,
+                RenameContainerOptionsBuilder::new().name(new_name).build(),
+            )
+            .await
+            .with_context(|| format!("failed to rename container '{id}' to '{new_name}'"))
     }
 
     pub async fn remove_image(&self, image: &str) -> Result<()> {
         use bollard::query_parameters::RemoveImageOptionsBuilder;
         self.inner
-            .remove_image(
-                image,
-                Some(RemoveImageOptionsBuilder::new().build()),
-                None,
-            )
+            .remove_image(image, Some(RemoveImageOptionsBuilder::new().build()), None)
             .await
             .with_context(|| format!("failed to remove image '{image}'"))?;
         Ok(())
@@ -940,6 +939,68 @@ mod tests {
         );
         let info = local_image_info_from_inspect(&inspect);
         assert_eq!(info.digest, Some("sha256:deadbeef".to_string()));
+    }
+
+    // ── summary_to_info ───────────────────────────────────────────────────────
+
+    fn make_summary(
+        id: Option<&str>,
+        names: Option<Vec<&str>>,
+        image: Option<&str>,
+        state: Option<&str>,
+    ) -> bollard::models::ContainerSummary {
+        use bollard::models::ContainerSummaryStateEnum;
+        bollard::models::ContainerSummary {
+            id: id.map(String::from),
+            names: names.map(|v| v.into_iter().map(String::from).collect()),
+            image: image.map(String::from),
+            image_id: None,
+            state: state.map(|s| s.parse::<ContainerSummaryStateEnum>().unwrap()),
+            labels: None,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn summary_to_info_happy_path() {
+        let s = make_summary(
+            Some("abc123def456"),
+            Some(vec!["/myapp"]),
+            Some("nginx:latest"),
+            Some("running"),
+        );
+        let info = summary_to_info(s).expect("should be Some");
+        assert_eq!(info.id, "abc123def456");
+        assert_eq!(info.name, "myapp");
+        assert_eq!(info.image, "nginx:latest");
+        assert!(matches!(info.state, ContainerState::Running));
+    }
+
+    #[test]
+    fn summary_to_info_none_id_returns_none() {
+        let s = make_summary(None, Some(vec!["/myapp"]), Some("nginx:latest"), Some("running"));
+        assert!(summary_to_info(s).is_none());
+    }
+
+    #[test]
+    fn summary_to_info_no_names_gives_empty_string() {
+        let s = make_summary(Some("abc123"), None, Some("nginx:latest"), Some("running"));
+        let info = summary_to_info(s).unwrap();
+        assert_eq!(info.name, "");
+    }
+
+    #[test]
+    fn summary_to_info_none_state_gives_unknown() {
+        let s = make_summary(Some("abc123"), Some(vec!["/myapp"]), None, None);
+        let info = summary_to_info(s).unwrap();
+        assert!(matches!(info.state, ContainerState::Unknown(_)));
+    }
+
+    #[test]
+    fn summary_to_info_slash_prefix_stripped_from_name() {
+        let s = make_summary(Some("abc123"), Some(vec!["/some-container"]), None, Some("running"));
+        let info = summary_to_info(s).unwrap();
+        assert_eq!(info.name, "some-container");
     }
 
     // ── ContainerSelector ─────────────────────────────────────────────────────

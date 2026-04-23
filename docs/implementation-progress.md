@@ -259,7 +259,32 @@
 
 ## Phase 8 — Self-update & graceful shutdown
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `src/docker.rs` — added `DockerClient::rename_container(id, new_name)` using `bollard::query_parameters::RenameContainerOptionsBuilder`
+- `src/selfupdate.rs` (new) — container ID detection and naming utilities:
+  - `detect_own_container_id()` — reads `$HOSTNAME` env var (Docker sets this to the first 12 chars of the container ID), falls back to `/etc/hostname`; returns `None` outside a container
+  - `detect_own_container_id_inner(value, path)` — inner testable form that accepts the hostname value directly (avoids env var mutation in tests)
+  - `temp_container_name(original)` — produces `"{original}-saurron-old"` as the rename target during self-update
+  - `is_self_container(container_id, own_id)` — checks full ID == own_id or starts_with own_id (handles short 12-char vs full 64-char ID forms)
+  - 9 unit tests: detection from value, detection from file, fallback to file on empty value, returns None when both missing, temp name suffix, exact/prefix/no-match for `is_self_container`
+- `src/update.rs` — self-update integrated into `UpdateEngine`:
+  - `run_cycle` now calls `selfupdate::detect_own_container_id()` at the start of each cycle
+  - In Phase D, containers matching the own ID are deferred to a `self_update_queue` and processed last (after all other containers update)
+  - `self_update_one(container, stale_info, inspect)` — self-update path: pull new image → extract run config → rename self to temp name → create new container under original name → start it → `monitor_startup` (same timeout and rollback flags as regular updates); on failure: stop + remove replacement container, rename self back to original name, return `UpdateResult::Failed`; on success: audit trail, return `UpdateResult::Updated`
+- `src/main.rs` — graceful shutdown signal handling:
+  - `shutdown_signal()` async function: on Linux waits for SIGTERM or SIGINT (via `tokio::signal::unix`); on other platforms waits for `ctrl_c`
+  - Both the HTTP-enabled and no-HTTP dispatch paths now include a `shutdown_signal()` arm in `tokio::select!`; on receipt, acquires `update_lock.lock().await` (which blocks until any active update cycle finishes), logs completion, then exits
+  - `--run-once` path is unaffected (single cycle, exits immediately)
+
+**Milestone verification:** All 207 unit and property-based tests pass; `cargo clippy` clean (no new warnings from Phase 8 code); `cargo fmt` clean.
+
+**Notes:**
+- The self-update flow leaves the renamed old container alive after the replacement starts; the old container will stop naturally when the current process exits
+- Self-update failure recovery restores the original container name via rename (no image recreate needed — the container is still running)
+- "Flush pending notifications" on shutdown is a no-op until Phase 9 wires the notification system; the lock-based shutdown correctly waits for the current update cycle to complete
 
 ---
 
