@@ -866,6 +866,14 @@ mod tests {
         assert!(realm.is_empty());
     }
 
+    #[test]
+    fn www_auth_unknown_key_is_ignored() {
+        let header = r#"Bearer realm="https://auth.docker.io/token",service="registry.docker.io",unknown_key="value""#;
+        let (realm, service, _) = parse_www_authenticate(header, "myrepo");
+        assert_eq!(realm, "https://auth.docker.io/token");
+        assert_eq!(service, "registry.docker.io");
+    }
+
     // ── split_registry_and_repo ───────────────────────────────────────────────
 
     #[test]

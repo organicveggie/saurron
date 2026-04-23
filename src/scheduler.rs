@@ -128,6 +128,20 @@ mod tests {
         assert!(parse_schedule_mode(&cfg).is_err());
     }
 
+    #[test]
+    fn run_once_with_interval_is_error() {
+        let mut cfg = make_config(&["--run-once"]);
+        cfg.poll_interval = Some("5m".to_string());
+        assert!(parse_schedule_mode(&cfg).is_err());
+    }
+
+    #[test]
+    fn interval_and_schedule_together_is_error() {
+        let mut cfg = make_config(&["--interval", "5m"]);
+        cfg.schedule = Some("0 4 * * *".to_string());
+        assert!(parse_schedule_mode(&cfg).is_err());
+    }
+
     #[tokio::test]
     async fn run_once_calls_cycle_exactly_once() {
         use std::sync::Arc;
@@ -143,5 +157,26 @@ mod tests {
         })
         .await;
         assert_eq!(count.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn interval_loop_executes_cycle() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let count = Arc::new(AtomicUsize::new(0));
+        let count2 = Arc::clone(&count);
+        let handle = tokio::spawn(run_scheduler(
+            ScheduleMode::Interval(Duration::from_millis(1)),
+            move || {
+                let c = Arc::clone(&count2);
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                }
+            },
+        ));
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        handle.abort();
+        assert!(count.load(Ordering::SeqCst) >= 1);
     }
 }

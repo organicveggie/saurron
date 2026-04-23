@@ -949,12 +949,13 @@ mod tests {
         image: Option<&str>,
         state: Option<&str>,
     ) -> bollard::models::ContainerSummary {
+        use bollard::models::ContainerSummaryStateEnum;
         bollard::models::ContainerSummary {
             id: id.map(String::from),
             names: names.map(|v| v.into_iter().map(String::from).collect()),
             image: image.map(String::from),
             image_id: None,
-            state: state.map(String::from),
+            state: state.map(|s| s.parse::<ContainerSummaryStateEnum>().unwrap()),
             labels: None,
             ..Default::default()
         }

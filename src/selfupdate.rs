@@ -98,4 +98,10 @@ mod tests {
     fn is_self_container_no_match() {
         assert!(!is_self_container("xyz999", "abc123"));
     }
+
+    #[test]
+    fn detect_own_container_id_public_wrapper_does_not_panic() {
+        // Exercises the public wrapper that reads $HOSTNAME or falls back to /etc/hostname.
+        let _ = detect_own_container_id();
+    }
 }
