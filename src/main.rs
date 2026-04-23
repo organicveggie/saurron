@@ -1,13 +1,4 @@
-mod audit;
-mod cli;
-mod config;
-mod docker;
-mod http;
-mod registry;
-mod scheduler;
-mod selfupdate;
-mod update;
-
+use saurron::{cli, config, docker, http, registry, scheduler};
 use std::sync::Arc;
 
 use anyhow::Context as _;

@@ -12,26 +12,26 @@ use tracing::{error, info};
 
 use crate::{config, docker, registry, update};
 
-pub(crate) struct AppStateInner {
-    pub(crate) docker: docker::DockerClient,
-    pub(crate) registry: registry::RegistryClient,
-    pub(crate) config: config::Config,
-    pub(crate) selector: docker::ContainerSelector,
+pub struct AppStateInner {
+    pub docker: docker::DockerClient,
+    pub registry: registry::RegistryClient,
+    pub config: config::Config,
+    pub selector: docker::ContainerSelector,
     /// Held for the duration of any update cycle. Scheduler: .lock().await; HTTP: .try_lock().
-    pub(crate) update_lock: tokio::sync::Mutex<()>,
+    pub update_lock: tokio::sync::Mutex<()>,
 }
 
-pub(crate) type AppState = Arc<AppStateInner>;
+pub type AppState = Arc<AppStateInner>;
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct UpdateQuery {
-    pub(crate) container: Option<String>,
-    pub(crate) image: Option<String>,
+struct UpdateQuery {
+    container: Option<String>,
+    image: Option<String>,
 }
 
 /// Validate that the HTTP API token configuration is consistent.
 /// Called at startup before binding the port.
-pub(crate) fn validate_token_config(cfg: &config::HttpApiConfig) -> anyhow::Result<()> {
+pub fn validate_token_config(cfg: &config::HttpApiConfig) -> anyhow::Result<()> {
     if cfg.update && cfg.token.is_none() {
         anyhow::bail!("--http-api-update requires --http-api-token");
     }
@@ -53,7 +53,7 @@ fn check_auth(headers: &HeaderMap, token: &str) -> bool {
 }
 
 /// Run a full enumeration + update cycle using the shared application state.
-pub(crate) async fn run_cycle_with_state(state: &AppStateInner) {
+pub async fn run_cycle_with_state(state: &AppStateInner) {
     let all = match state.docker.list_containers(&state.selector).await {
         Ok(v) => v,
         Err(e) => {
@@ -139,7 +139,7 @@ async fn get_metrics(State(state): State<AppState>, headers: HeaderMap) -> Respo
         .into_response()
 }
 
-pub(crate) async fn start_server(state: AppState) -> anyhow::Result<()> {
+pub async fn start_server(state: AppState) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
     let mut router = axum::Router::new().route("/v1/health", get(health));

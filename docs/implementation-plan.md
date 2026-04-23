@@ -129,6 +129,25 @@
 
 ---
 
+## Post-Phase 8 — Initial Integration Tests
+
+**Work:**
+
+- Add `src/lib.rs` exposing all modules as `pub mod` so integration tests can import them
+- Promote `pub(crate)` items in `http.rs` and `scheduler.rs` that `main.rs` (now a separate binary crate) needs to access
+- Fix `RegistryClient` to use HTTP for `localhost` / `127.0.0.1` registries (previously hardcoded `https://`), enabling local-registry testing
+- Add `testcontainers` dev-dependency for self-contained registry fixtures
+- Add `tests/integration.rs` with four `#[ignore]`-gated tests:
+  - `docker_client_connect_and_ping` — verifies Docker socket connectivity
+  - `registry_freshness_up_to_date` — local registry, same digest → `UpToDate`
+  - `registry_freshness_stale_non_semver` — overwrote tag with different image → `Stale`
+  - `registry_freshness_semver_stale` — higher SemVer tag present → `Stale`
+- Add integration test step to CI (`cargo test --test integration -- --include-ignored`)
+
+**Milestone:** `cargo test --test integration -- --include-ignored` passes against a live Docker daemon; unit tests (`cargo test`) unaffected.
+
+---
+
 ## Phase 9 — Notification system
 
 **Work:**

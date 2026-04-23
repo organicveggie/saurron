@@ -5,13 +5,13 @@ use anyhow::Result;
 
 use crate::{config::Config, update::parse_duration_secs};
 
-pub(crate) enum ScheduleMode {
+pub enum ScheduleMode {
     RunOnce,
     Interval(Duration),
     Cron(Box<cron::Schedule>),
 }
 
-pub(crate) fn parse_schedule_mode(config: &Config) -> Result<ScheduleMode> {
+pub fn parse_schedule_mode(config: &Config) -> Result<ScheduleMode> {
     if config.run_once {
         if config.poll_interval.is_some() || config.schedule.is_some() {
             anyhow::bail!("--run-once is mutually exclusive with --interval and --schedule");
@@ -36,7 +36,7 @@ pub(crate) fn parse_schedule_mode(config: &Config) -> Result<ScheduleMode> {
     }
 }
 
-pub(crate) async fn run_scheduler<F, Fut>(mode: ScheduleMode, run_cycle: F)
+pub async fn run_scheduler<F, Fut>(mode: ScheduleMode, run_cycle: F)
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = ()>,
