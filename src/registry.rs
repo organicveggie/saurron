@@ -76,6 +76,17 @@ pub struct StaleInfo {
 
 // ── Registry client ───────────────────────────────────────────────────────────
 
+/// Returns `"http"` for localhost and loopback registries, `"https"` otherwise.
+/// Needed so integration tests (and on-prem HTTP-only registries) work without TLS.
+fn scheme_for_registry(registry: &str) -> &'static str {
+    let host = registry.split(':').next().unwrap_or(registry);
+    if host == "localhost" || host == "127.0.0.1" {
+        "http"
+    } else {
+        "https"
+    }
+}
+
 pub struct RegistryClient {
     client: reqwest::Client,
     head_warn_strategy: HeadWarnStrategy,
@@ -231,8 +242,11 @@ impl RegistryClient {
         tag: &str,
     ) -> Result<String, RegistryError> {
         let url = format!(
-            "https://{}/v2/{}/manifests/{}",
-            image_ref.registry, image_ref.repository, tag
+            "{}://{}/v2/{}/manifests/{}",
+            scheme_for_registry(&image_ref.registry),
+            image_ref.registry,
+            image_ref.repository,
+            tag
         );
         debug!(registry = %image_ref.registry, repository = %image_ref.repository, tag = %tag, url = %url, "fetching manifest digest");
         let resp = self
@@ -253,8 +267,10 @@ impl RegistryClient {
         }
 
         let url = format!(
-            "https://{}/v2/{}/tags/list",
-            image_ref.registry, image_ref.repository
+            "{}://{}/v2/{}/tags/list",
+            scheme_for_registry(&image_ref.registry),
+            image_ref.registry,
+            image_ref.repository
         );
         debug!(url = %url, "fetching tag list");
         let resp = self
@@ -608,6 +624,23 @@ pub fn find_best_semver_update<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── scheme_for_registry ───────────────────────────────────────────────────
+
+    #[test]
+    fn scheme_for_localhost_is_http() {
+        assert_eq!(scheme_for_registry("localhost"), "http");
+        assert_eq!(scheme_for_registry("localhost:5000"), "http");
+        assert_eq!(scheme_for_registry("127.0.0.1"), "http");
+        assert_eq!(scheme_for_registry("127.0.0.1:5001"), "http");
+    }
+
+    #[test]
+    fn scheme_for_remote_is_https() {
+        assert_eq!(scheme_for_registry("registry-1.docker.io"), "https");
+        assert_eq!(scheme_for_registry("ghcr.io"), "https");
+        assert_eq!(scheme_for_registry("my-registry.example.com:443"), "https");
+    }
 
     // ── parse_image_ref ───────────────────────────────────────────────────────
 

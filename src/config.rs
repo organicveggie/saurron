@@ -729,8 +729,7 @@ mod tests {
 
     #[test]
     fn notification_template_resolves_literal() {
-        let cfg =
-            Config::load(&args(&["--notification-template", "Updated: {{name}}"])).unwrap();
+        let cfg = Config::load(&args(&["--notification-template", "Updated: {{name}}"])).unwrap();
         assert_eq!(
             cfg.notifications.general.template,
             Some("Updated: {{name}}".to_string())

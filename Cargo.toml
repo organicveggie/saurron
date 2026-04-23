@@ -30,3 +30,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 [dev-dependencies]
 proptest = "1"
+testcontainers = "0.27"

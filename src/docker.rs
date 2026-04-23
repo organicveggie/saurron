@@ -978,7 +978,12 @@ mod tests {
 
     #[test]
     fn summary_to_info_none_id_returns_none() {
-        let s = make_summary(None, Some(vec!["/myapp"]), Some("nginx:latest"), Some("running"));
+        let s = make_summary(
+            None,
+            Some(vec!["/myapp"]),
+            Some("nginx:latest"),
+            Some("running"),
+        );
         assert!(summary_to_info(s).is_none());
     }
 
@@ -998,7 +1003,12 @@ mod tests {
 
     #[test]
     fn summary_to_info_slash_prefix_stripped_from_name() {
-        let s = make_summary(Some("abc123"), Some(vec!["/some-container"]), None, Some("running"));
+        let s = make_summary(
+            Some("abc123"),
+            Some(vec!["/some-container"]),
+            None,
+            Some("running"),
+        );
         let info = summary_to_info(s).unwrap();
         assert_eq!(info.name, "some-container");
     }

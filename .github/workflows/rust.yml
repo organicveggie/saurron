@@ -41,3 +41,5 @@ jobs:
         run: echo "release_built=true" >> $GITHUB_OUTPUT
       - name: Run tests in "${{ env.RUST_BUILD_TARGET }}" mode
         run: cargo test --profile ${{ env.RUST_BUILD_TARGET }}
+      - name: Run integration tests
+        run: cargo test --profile ${{ env.RUST_BUILD_TARGET }} --test integration -- --include-ignored

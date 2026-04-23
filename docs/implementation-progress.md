@@ -288,6 +288,33 @@
 
 ---
 
+## Post-Phase 8 Enhancement — Initial Integration Tests
+
+**Status:** Complete
+
+**Completed work:**
+
+- `src/lib.rs` (new) — declares all modules as `pub mod`; enables `tests/` to import from the library crate
+- `src/main.rs` — removed nine inline `mod` declarations; now imports modules via `use saurron::{...}` from the library crate
+- `src/http.rs` — promoted `AppStateInner`, its fields, `AppState`, `validate_token_config`, `run_cycle_with_state`, `start_server` from `pub(crate)` to `pub` (required by binary crate after lib extraction); `UpdateQuery` made private (not needed outside http.rs)
+- `src/scheduler.rs` — promoted `ScheduleMode`, `parse_schedule_mode`, `run_scheduler` from `pub(crate)` to `pub`
+- `src/registry.rs` — added private `scheme_for_registry(registry)` function that returns `"http"` for `localhost`/`127.0.0.1` and `"https"` otherwise; applied to both `fetch_manifest_digest` and `list_tags` URL construction; 2 unit tests
+- `Cargo.toml` — added `testcontainers = "0.27"` to `[dev-dependencies]`
+- `tests/integration.rs` (new) — four `#[tokio::test] #[ignore]` integration tests using a testcontainers-managed `registry:2` instance and the live Docker socket:
+  - `docker_client_connect_and_ping` — `DockerClient::connect` + `.ping()` against real daemon
+  - `registry_freshness_up_to_date` — push busybox to local registry; `check_freshness` with matching digest → `UpToDate`
+  - `registry_freshness_stale_non_semver` — overwrite tag with alpine; old digest → `Stale`
+  - `registry_freshness_semver_stale` — push `v1.0.0` and `v1.1.0`; check `v1.0.0` → `Stale` with `new_image` containing `v1.1.0`
+- `.github/workflows/rust.yml` — added `cargo test --test integration -- --include-ignored` step after unit tests; both `ubuntu-latest` and `ubuntu-24.04-arm` runners have Docker available
+
+**Notes:**
+
+- Integration tests are `#[ignore]` by default so `cargo test` stays fast; run explicitly with `cargo test --test integration -- --include-ignored`
+- HTTP support in `RegistryClient` is intentionally limited to `localhost`/`127.0.0.1`; on-prem HTTP-only registries at other addresses still use HTTPS (proper insecure-registry support deferred)
+- 236 unit tests pass; binary still compiles cleanly after the lib extraction
+
+---
+
 ## Phase 9 — Notification system
 
 **Status:** Not started
