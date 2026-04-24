@@ -1,0 +1,10 @@
+.git/
+.github/
+.devcontainer/
+target/
+tests/
+docs/
+*.md
+lcov.info
+tarpaulin-report.*
+*.code-workspace
