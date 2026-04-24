@@ -352,7 +352,28 @@
 
 ## Phase 10 — Prometheus metrics
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `src/metrics.rs` (new) — five `IntCounter` metrics registered with the global prometheus registry via `std::sync::LazyLock` (no extra dependency):
+  - `saurron_scan_cycles_total` — incremented once per completed update cycle
+  - `saurron_scan_cycles_skipped_total` — incremented when a cycle is skipped because another was already running (HTTP 409)
+  - `saurron_containers_scanned_total` — sum of all containers evaluated per cycle (updated + skipped + failed + rolled\_back + up\_to\_date)
+  - `saurron_containers_updated_total` — containers successfully updated per cycle
+  - `saurron_containers_failed_total` — containers that failed to update per cycle
+  - `pub fn record_cycle(report: &SessionReport)` — increments cycle + container counters from a `SessionReport`
+  - `pub fn record_skipped_cycle()` — increments the skipped-cycles counter
+  - 4 unit tests: text-output presence check for all 5 metric names, delta-assertion increment tests for `record_cycle` (including rollbacks counting in scanned), and `record_skipped_cycle`
+- `src/lib.rs` — added `pub mod metrics;`
+- `src/http.rs` — `run_cycle_with_state` calls `metrics::record_cycle(&report)` after each completed cycle; `post_update` calls `metrics::record_skipped_cycle()` when `try_lock()` fails
+
+**Milestone verification:** `GET /v1/metrics` now returns all 5 metric names with correct values after a scan cycle. All 265 unit tests pass; `cargo clippy` clean; `cargo fmt` clean; coverage 44.28% (above 42% threshold). `src/metrics.rs` is 100% covered.
+
+**Notes:**
+
+- All metrics are `IntCounter` (monotonically increasing, reset on restart); no labels
+- The two `http.rs` call sites (`record_cycle`, `record_skipped_cycle`) are not covered by unit tests (need live Docker); covered end-to-end when running the binary with `--http-api-metrics`
 
 ---
 

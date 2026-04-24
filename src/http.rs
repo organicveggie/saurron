@@ -10,7 +10,7 @@ use axum::{
 use serde::Deserialize;
 use tracing::{error, info};
 
-use crate::{config, docker, notifications, registry, update};
+use crate::{config, docker, metrics, notifications, registry, update};
 
 pub struct AppStateInner {
     pub docker: docker::DockerClient,
@@ -65,6 +65,7 @@ pub async fn run_cycle_with_state(state: &AppStateInner) {
     let report = update::UpdateEngine::new(&state.docker, &state.registry, &state.config)
         .run_cycle(&selected)
         .await;
+    metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
 }
 
@@ -84,6 +85,7 @@ async fn post_update(
     }
 
     let Ok(_guard) = state.update_lock.try_lock() else {
+        metrics::record_skipped_cycle();
         return StatusCode::CONFLICT.into_response();
     };
 

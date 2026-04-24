@@ -32,9 +32,9 @@ Inspired by [Watchtower](https://github.com/containrrr/watchtower).
 - **Self-update** — detects own container via `$HOSTNAME`; renames running container, starts replacement under original name; failure recovery restores previous container
 - **Graceful shutdown** — `SIGTERM`/`SIGINT` waits for in-progress update cycle to complete before exiting
 - **Notifications** — batched per-cycle reports dispatched to all configured targets concurrently; targets: webhook (HTTP POST, custom headers, optional TLS skip-verify), email (SMTP/STARTTLS via lettre), MQTT (MQTTv5 via rumqttc, QoS 0/1/2), Pushover; MiniJinja template rendering with configurable custom template; fires only on interesting cycles (any update, failure, or rollback)
+- **Prometheus metrics** — five `IntCounter` metrics exposed at `GET /v1/metrics`: `saurron_scan_cycles_total`, `saurron_scan_cycles_skipped_total` (HTTP 409 conflicts), `saurron_containers_scanned_total`, `saurron_containers_updated_total`, `saurron_containers_failed_total`
 
 ### Planned
-- **Prometheus metrics** — five metrics exposed at `/v1/metrics`: scans total/skipped, containers scanned/updated/failed
 - **Containerization** — multi-stage `Dockerfile`; full integration tests against a `docker-compose` fixture with a local registry
 
 ---
