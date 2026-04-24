@@ -25,17 +25,17 @@ Inspired by [Watchtower](https://github.com/containrrr/watchtower).
 - **Audit trail** — append-only JSON log file capturing every update and rollback event (container name/id, old and new image digests and tags, outcome, failure reason)
 - **Registry client** — Docker Registry HTTP API v2; manifest HEAD for digest comparison; Bearer token auth for public registries; SemVer tag enumeration and highest-version selection; pre-release opt-in via `saurron.semver-pre-release` label; digest-pinned image detection and skip
 - **Freshness detection** — non-SemVer digest comparison, SemVer tag ranking with strict 2.0.0 grammar, per-container `saurron.semver-pre-release` and `saurron.non-semver-strategy` label overrides; configurable `--head-warn-strategy` for failed manifest HEAD requests
+- **Update engine** — pull new image → stop old container → start with preserved run config (env, volumes, networks, ports, labels) → one container at a time in reverse dependency order; `--monitor-only`, `--no-pull`, `--cleanup`, `--revive-stopped` modes
+- **Rollback manager** — automatic rollback on non-zero exit, healthcheck failure, or startup timeout; configurable timeout; full audit log entries for rollback events
+- **Scheduler** — poll interval (duration or cron expression); `--run-once` mode for external schedulers
+- **HTTP API** — `POST /v1/update` (with `?image=` and `?container=` scoping), `GET /v1/health`, `GET /v1/metrics`; Bearer token auth; concurrent-request locking
+- **Self-update** — detects own container via `$HOSTNAME`; renames running container, starts replacement under original name; failure recovery restores previous container
+- **Graceful shutdown** — `SIGTERM`/`SIGINT` waits for in-progress update cycle to complete before exiting
+- **Notifications** — batched per-cycle reports dispatched to all configured targets concurrently; targets: webhook (HTTP POST, custom headers, optional TLS skip-verify), email (SMTP/STARTTLS via lettre), MQTT (MQTTv5 via rumqttc, QoS 0/1/2), Pushover; MiniJinja template rendering with configurable custom template; fires only on interesting cycles (any update, failure, or rollback)
 
 ### Planned
-- **Update engine** — pull new image → stop old container → start with preserved config (env, volumes, networks, ports, labels) → one container at a time in reverse dependency order; `--monitor-only`, `--no-pull`, `--cleanup`, `--revive-stopped` modes
-- **Rollback manager** — automatic rollback on non-zero exit, healthcheck failure, or startup timeout; configurable timeout; full audit log entries for rollback events
-- **Scheduler** — poll interval (duration or cron expression); `--run-once` mode for external schedulers; inbound webhook with Bearer token auth and concurrent-request rules
-- **HTTP API** — `POST /v1/update` (with `?image=` and `?container=` scoping), `GET /v1/health`, `GET /v1/metrics`
-- **Self-update** — detects own container via `$HOSTNAME`; renames running container, starts replacement under original name; failure recovery restores previous container
-- **Graceful shutdown** — `SIGTERM`/`SIGINT` finishes in-progress update cycle before exiting
-- **Notifications** — batched per-cycle reports via webhook (HTTP POST), email (SMTP/STARTTLS), MQTT, and Pushover; MiniJinja custom templates
 - **Prometheus metrics** — five metrics exposed at `/v1/metrics`: scans total/skipped, containers scanned/updated/failed
-- **Containerization** — multi-stage `Dockerfile`; integration tests against a `docker-compose` fixture with a local registry
+- **Containerization** — multi-stage `Dockerfile`; full integration tests against a `docker-compose` fixture with a local registry
 
 ---
 

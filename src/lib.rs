@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod docker;
 pub mod http;
+pub mod notifications;
 pub mod registry;
 pub mod scheduler;
 pub mod selfupdate;

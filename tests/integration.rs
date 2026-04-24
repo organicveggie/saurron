@@ -170,3 +170,70 @@ async fn registry_freshness_semver_stale() {
         other => panic!("expected Stale, got {other:?}"),
     }
 }
+
+// ── Test 5: webhook notification ──────────────────────────────────────────────
+
+#[tokio::test]
+#[ignore]
+async fn webhook_dispatch_posts_to_local_server() {
+    use axum::{Router, body::Bytes, http::StatusCode, routing::post};
+    use saurron::{
+        config::WebhookConfig,
+        notifications::{render_template, send_webhook},
+        update::SessionReport,
+    };
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    let received: Arc<Mutex<Option<String>>> = Arc::new(Mutex::new(None));
+    let received_clone = Arc::clone(&received);
+
+    let app = Router::new().route(
+        "/hook",
+        post(move |body: Bytes| {
+            let slot = Arc::clone(&received_clone);
+            async move {
+                *slot.lock().await = Some(String::from_utf8_lossy(&body).into_owned());
+                StatusCode::OK
+            }
+        }),
+    );
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let report = SessionReport {
+        updated: vec!["nginx".to_string()],
+        ..Default::default()
+    };
+    let body = render_template(&report, None).unwrap();
+
+    let cfg = WebhookConfig {
+        url: format!("http://127.0.0.1:{port}/hook"),
+        headers: Some("X-Saurron-Test: yes".to_string()),
+        tls_skip_verify: false,
+    };
+
+    send_webhook(&cfg, &body)
+        .await
+        .expect("send_webhook failed");
+
+    let got = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            if let Some(v) = received.lock().await.take() {
+                return v;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for webhook body");
+
+    assert!(
+        got.contains("nginx"),
+        "body should mention updated container"
+    );
+    assert!(got.contains("Saurron update report"));
+}

@@ -27,3 +27,5 @@ lcov.info
 tarpaulin-report.json
 
 tarpaulin-report.html
+
+*.profraw
