@@ -1,8 +1,10 @@
+use clap::Parser as _;
 use saurron::{
-    cli::HeadWarnStrategy,
-    config::DockerConfig,
-    docker::DockerClient,
+    cli::{Args, HeadWarnStrategy},
+    config::{Config, DockerConfig},
+    docker::{ContainerSelector, DockerClient},
     registry::{FreshnessResult, NonSemverStrategy, RegistryClient},
+    update::UpdateEngine,
 };
 use testcontainers::{
     ContainerAsync, GenericImage, ImageExt,
@@ -236,4 +238,99 @@ async fn webhook_dispatch_posts_to_local_server() {
         "body should mention updated container"
     );
     assert!(got.contains("Saurron update report"));
+}
+
+// ── Test 6: full update cycle ─────────────────────────────────────────────────
+
+/// Ensures a container running an old SemVer image gets updated to the newer
+/// version by `UpdateEngine::run_cycle`, exercising the complete
+/// pull → stop → remove → create → start flow against a real Docker daemon.
+#[tokio::test]
+#[ignore]
+async fn update_cycle_updates_stale_container() {
+    const CONTAINER: &str = "saurron-integ-update";
+
+    // CleanupGuard removes the test container even when the test panics.
+    struct CleanupGuard(&'static str);
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            let _ = std::process::Command::new("docker")
+                .args(["rm", "-f", self.0])
+                .output();
+        }
+    }
+    let _guard = CleanupGuard(CONTAINER);
+
+    // 1. Local registry + two SemVer image versions.
+    let (_registry, port) = start_local_registry().await;
+    let v1 = format!("localhost:{port}/testapp:v1.0.0");
+    let v2 = format!("localhost:{port}/testapp:v1.1.0");
+
+    docker_cmd(&["pull", "busybox:latest"]);
+    tag_and_push("busybox:latest", &v1);
+    tag_and_push("busybox:latest", &v2);
+
+    // 2. Start a container on the old version. Label enables opt-in selection.
+    docker_cmd(&[
+        "run",
+        "-d",
+        "--name",
+        CONTAINER,
+        "-l",
+        "saurron.enable=true",
+        &v1,
+        "sleep",
+        "3600",
+    ]);
+
+    // 3. Build engine components.
+    let docker = DockerClient::connect(&default_docker_config()).expect("docker connect failed");
+    let registry =
+        RegistryClient::new(HeadWarnStrategy::Auto, "test", None).expect("registry client failed");
+    let config = Config::load(&Args::parse_from(["saurron"])).expect("config load failed");
+
+    // Opt-in selector: only containers with saurron.enable=true.
+    let selector = ContainerSelector::new(true, false, &[], &[], false, false);
+    let all = docker
+        .list_containers(&selector)
+        .await
+        .expect("list_containers failed");
+    let selected: Vec<_> = all.into_iter().filter(|c| c.name == CONTAINER).collect();
+
+    assert!(
+        !selected.is_empty(),
+        "test container '{CONTAINER}' not found in running containers"
+    );
+
+    // 4. Run one update cycle.
+    let report = UpdateEngine::new(&docker, &registry, &config)
+        .run_cycle(&selected)
+        .await;
+
+    // 5. Assert the container was updated.
+    assert!(
+        report.updated.contains(&CONTAINER.to_string()),
+        "expected '{CONTAINER}' in updated list, got: {:?}",
+        report
+    );
+    assert!(
+        report.failed.is_empty(),
+        "unexpected failures: {:?}",
+        report.failed
+    );
+
+    // 6. Verify the running container image is now v1.1.0.
+    let inspect = docker
+        .inspect_container(CONTAINER)
+        .await
+        .expect("inspect after update failed");
+    let image = inspect
+        .config
+        .as_ref()
+        .and_then(|c| c.image.as_deref())
+        .unwrap_or("");
+    assert!(
+        image.contains("v1.1.0"),
+        "expected container image to contain 'v1.1.0', got: '{image}'"
+    );
 }

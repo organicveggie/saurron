@@ -377,6 +377,35 @@
 
 ---
 
-## Phase 11 — Containerization & integration testing
+## Phase 11a — Dockerfile & full update cycle integration test
+
+**Status:** Complete
+
+**Completed work:**
+
+- `Dockerfile` (new) — two-stage build:
+  - **builder** (`rust:1-slim-bookworm`): `ARG SAURRON_BUILD_VERSION` forwarded via `ENV` to `build.rs`; `cargo build --profile release --locked`
+  - **runtime** (`debian:bookworm-slim`): `ca-certificates` installed (required for HTTPS registry access via rustls); non-root user `saurron` (UID 1000, primary GID 0 for Docker socket access); `EXPOSE 8080`; OCI image labels: `title`, `description`, `version`, `licenses` (GPL-3.0-or-later), `source` (https://github.com/organicveggie/saurron)
+- `.dockerignore` (new) — excludes `target/`, `tests/`, `docs/`, `*.md`, build artifacts, `.git/`, `.devcontainer/`
+- `tests/integration.rs` — added `update_cycle_updates_stale_container` (`#[ignore]`): the first end-to-end test of the full Saurron update flow:
+  1. Starts a `registry:2` container (testcontainers)
+  2. Pushes `busybox:latest` as both `v1.0.0` and `v1.1.0` to the local registry
+  3. Runs a test container on `v1.0.0` with `saurron.enable=true`
+  4. Calls `UpdateEngine::run_cycle` via library API (not the binary)
+  5. Asserts `SessionReport.updated` contains the container name
+  6. Inspects the updated container and asserts its image contains `v1.1.0`
+  7. `CleanupGuard` (Drop impl) removes the test container even on panic
+- `src/metrics.rs` — added a `Mutex` to serialise metric unit tests (prometheus counters are process-global; parallel delta assertions were non-deterministic)
+- `README.md` — added Docker usage section
+
+**Notes:**
+
+- The Dockerfile does not use cargo-chef; dependency caching can be added later if build times become an issue
+- Build version injection: `docker build --build-arg SAURRON_BUILD_VERSION=v1.2.3 .`
+- Non-root user with GID 0 allows socket access when the Docker socket is mounted with group-write permissions; operators may also need `--group-add $(stat -c '%g' /var/run/docker.sock)`
+
+---
+
+## Phase 11b — CI pipeline
 
 **Status:** Not started
