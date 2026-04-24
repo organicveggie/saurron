@@ -10,7 +10,7 @@ use axum::{
 use serde::Deserialize;
 use tracing::{error, info};
 
-use crate::{config, docker, registry, update};
+use crate::{config, docker, notifications, registry, update};
 
 pub struct AppStateInner {
     pub docker: docker::DockerClient,
@@ -62,9 +62,10 @@ pub async fn run_cycle_with_state(state: &AppStateInner) {
         }
     };
     let selected = state.docker.select_containers(&all, &state.selector);
-    update::UpdateEngine::new(&state.docker, &state.registry, &state.config)
+    let report = update::UpdateEngine::new(&state.docker, &state.registry, &state.config)
         .run_cycle(&selected)
         .await;
+    notifications::dispatch(&state.config.notifications, &report).await;
 }
 
 async fn health() -> StatusCode {

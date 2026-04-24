@@ -317,7 +317,36 @@
 
 ## Phase 9 — Notification system
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `Cargo.toml` — added lettre features: `tokio1-rustls-tls`, `builder`, `smtp-transport`, `ring` (consistent with the project's rustls-everywhere approach)
+- `src/notifications.rs` (new) — all notification logic in one module:
+  - `DEFAULT_TEMPLATE` — minijinja template constant with `updated`, `rolled_back`, `failed`, `up_to_date` variables; rendered once per cycle and shared across all configured targets
+  - `should_notify(report)` — returns `true` only when `updated | failed | rolled_back` is non-empty (see `docs/TODO.md` for deferral note on making this configurable)
+  - `render_template(report, template)` — pure function; accepts optional custom template string; uses `DEFAULT_TEMPLATE` when `None`; minijinja renders the `SessionReport` fields
+  - `parse_webhook_headers(s)` — pure function; splits `"K:V,K2:V2"` on `,` then on first `:` (values may contain colons)
+  - `parse_mqtt_broker(broker)` — parses `tcp://host:port`, `mqtt://host:port`, or bare `host:port` / `host` (defaults to port 1883)
+  - `dispatch(config, report)` — async; checks `should_notify`, applies `GeneralNotifConfig.delay`, renders template, fans out to all four targets concurrently via `tokio::join!`; errors logged per-target, others continue
+  - `send_webhook(cfg, body)` — reqwest `POST`; `Content-Type: text/plain`; custom headers; separate client with `danger_accept_invalid_certs` when `tls_skip_verify = true`
+  - `send_email(cfg, body)` — lettre `AsyncSmtpTransport<Tokio1Executor>`; STARTTLS via `starttls_relay` or `builder_dangerous` + `TlsParameters` (skip-verify path); optional SMTP credentials; subject "Saurron update report"; `text/plain` body
+  - `send_mqtt(cfg, body)` — rumqttc v5 `AsyncClient`; event loop driven in a spawned task; configurable QoS (0/1/2); optional credentials; auto-generated client ID when not configured; brief wait before disconnect
+  - `send_pushover(cfg, body)` — reqwest JSON POST to `api.pushover.net/1/messages.json`; fields: `token`, `user`, `title`, `message`
+  - 25 unit tests: template rendering (4), header parsing (5), `should_notify` (5), `parse_mqtt_broker` (4), `dispatch` no-op and error paths (3 async), `send_webhook` with local axum server (3 async)
+- `src/lib.rs` — added `pub mod notifications;`
+- `src/http.rs` — `run_cycle_with_state` now captures the `SessionReport` returned by `run_cycle` and calls `notifications::dispatch` after each cycle
+- `tests/integration.rs` — added `webhook_dispatch_posts_to_local_server` (`#[ignore]`): starts a local axum server, renders a template, calls `send_webhook`, asserts the POST body matches
+- `docs/TODO.md` — added notes on configurable notification trigger and MQTT TLS support
+
+**Milestone verification:** All 261 unit tests pass; `cargo clippy` clean; `cargo fmt` clean; coverage 43.38% (above 42% threshold).
+
+**Notes:**
+
+- Notifications fire only on "interesting" cycles (any update, failure, or rollback); all-up-to-date cycles produce no notification — see `docs/TODO.md` for the deferred configurable-trigger item
+- Pushover uses JSON body (not form encoding) since `reqwest` is configured with `default-features = false` and the `form` feature is not enabled
+- MQTT is MQTTv5 (via `rumqttc-next = "0.30"` which re-exports `rumqttc_v5`); plain TCP only — TLS is a deferred TODO
+- Email and MQTT senders have no unit tests (require live SMTP/broker); covered by the network-level integration path in Phase 11
 
 ---
 

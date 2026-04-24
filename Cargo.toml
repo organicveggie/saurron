@@ -13,7 +13,7 @@ futures = "0.3"
 bollard = { version = "0.20", features = ["ssl"] }
 clap = { version = "4", features = ["derive", "env"] }
 config = { version = "0.15", default-features = false, features = ["toml"] }
-lettre = { version = "0.11", default-features = false }
+lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport", "ring"] }
 minijinja = "2"
 prometheus = "0.14"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
