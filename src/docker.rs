@@ -637,13 +637,34 @@ mod tests {
 
     #[test]
     fn container_state_known_variants() {
-        assert_eq!("created".parse::<ContainerState>().unwrap(), ContainerState::Created);
-        assert_eq!("restarting".parse::<ContainerState>().unwrap(), ContainerState::Restarting);
-        assert_eq!("running".parse::<ContainerState>().unwrap(), ContainerState::Running);
-        assert_eq!("removing".parse::<ContainerState>().unwrap(), ContainerState::Removing);
-        assert_eq!("paused".parse::<ContainerState>().unwrap(), ContainerState::Paused);
-        assert_eq!("exited".parse::<ContainerState>().unwrap(), ContainerState::Exited);
-        assert_eq!("dead".parse::<ContainerState>().unwrap(), ContainerState::Dead);
+        assert_eq!(
+            "created".parse::<ContainerState>().unwrap(),
+            ContainerState::Created
+        );
+        assert_eq!(
+            "restarting".parse::<ContainerState>().unwrap(),
+            ContainerState::Restarting
+        );
+        assert_eq!(
+            "running".parse::<ContainerState>().unwrap(),
+            ContainerState::Running
+        );
+        assert_eq!(
+            "removing".parse::<ContainerState>().unwrap(),
+            ContainerState::Removing
+        );
+        assert_eq!(
+            "paused".parse::<ContainerState>().unwrap(),
+            ContainerState::Paused
+        );
+        assert_eq!(
+            "exited".parse::<ContainerState>().unwrap(),
+            ContainerState::Exited
+        );
+        assert_eq!(
+            "dead".parse::<ContainerState>().unwrap(),
+            ContainerState::Dead
+        );
     }
 
     #[test]
