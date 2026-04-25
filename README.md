@@ -38,6 +38,17 @@ Inspired by [Watchtower](https://github.com/containrrr/watchtower).
 
 ## Getting Started
 
+### Pre-built binaries
+
+Download a tarball for your platform from the [latest release](https://github.com/organicveggie/saurron/releases/latest):
+
+```bash
+# Linux amd64
+curl -Lo saurron.tar.gz https://github.com/organicveggie/saurron/releases/latest/download/saurron-latest-linux-amd64.tar.gz
+tar -xzf saurron.tar.gz
+./saurron --help
+```
+
 ### Build from source
 
 ```bash
