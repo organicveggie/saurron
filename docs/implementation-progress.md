@@ -408,4 +408,24 @@
 
 ## Phase 11b — CI pipeline
 
-**Status:** Not started
+**Status:** Complete
+
+**Completed work:**
+
+- `.github/workflows/rust.yml` — added `lint` job and `docker-build` job:
+  - `lint` — runs `cargo fmt --check` and `cargo clippy --all-targets -- -D warnings` on `ubuntu-latest`; runs in parallel with `build`; fails CI on any formatting or lint violation
+  - `docker-build` — builds the Dockerfile with `--build-arg SAURRON_BUILD_VERSION=ci-test` and runs a smoke test (`docker run --rm saurron:ci-test --help`) to confirm the binary executes; gates on both `lint` and `build` succeeding; single platform (build correctness is not architecture-specific)
+- `.github/workflows/docker.yml` (new) — multi-platform Docker image publish pipeline:
+  - Triggers on push to `main` (publishes `:edge`) and on `v*` tag push (publishes `:major.minor.patch`, `:major.minor`, `:major`, `:latest`)
+  - `build` job — matrix over `ubuntu-latest` (amd64) and `ubuntu-24.04-arm` (arm64); each platform builds natively (no QEMU emulation); images pushed by digest only (no tag) so untagged blobs accumulate in GHCR; digests passed to next job via GitHub Actions artifacts; build cache scoped per platform (`type=gha,scope=linux-amd64` / `linux-arm64`)
+  - `merge` job — downloads both digests, uses `docker buildx imagetools create` to assemble a multi-platform manifest list, applies all final tags via `docker/metadata-action` output; inspects the resulting manifest as a sanity check
+  - Authenticates to GHCR via `GITHUB_TOKEN`; no manual secrets required
+- Fixed six pre-existing clippy violations exposed by the new `-D warnings` gate:
+  - `src/docker.rs` — `ContainerState::from_str` promoted to `impl std::str::FromStr` (avoids shadowing the standard trait method); nested `if let / if` collapsed using `is_some_and`
+  - `src/update.rs` — four nested `if let / if` blocks in `build_dependency_graph` collapsed using let-chain syntax (`&&` in `if let`, edition 2024)
+
+**Notes:**
+
+- The `docker-build` CI job (in `rust.yml`) verifies the Dockerfile on every PR and push; the `docker.yml` publish workflow is intentionally separate with its own `packages: write` permission and different triggers
+- Native ARM64 compilation avoids QEMU overhead (QEMU emulation is 10–30× slower than native for a Rust compile); the two-phase digest+merge pattern is the standard approach for multi-platform images without emulation
+- Cross-workflow `needs` (rust.yml → docker.yml) is not implemented; the convention is that tags are only pushed after CI passes (enforced via branch protection rules)
