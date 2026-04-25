@@ -76,11 +76,14 @@ pub struct StaleInfo {
 
 // ── Registry client ───────────────────────────────────────────────────────────
 
-/// Returns `"http"` for localhost and loopback registries, `"https"` otherwise.
-/// Needed so integration tests (and on-prem HTTP-only registries) work without TLS.
+/// Returns `"http"` for localhost and any bare-IP registries, `"https"` otherwise.
+/// Bare-IP registries (e.g. `172.17.0.1:5000`) are almost universally plain-HTTP
+/// (Docker itself requires explicit `insecure-registries` config for TLS at an IP),
+/// so treating them as http matches real-world usage and avoids TLS failures in
+/// devcontainer / Docker-in-Docker test environments.
 fn scheme_for_registry(registry: &str) -> &'static str {
     let host = registry.split(':').next().unwrap_or(registry);
-    if host == "localhost" || host == "127.0.0.1" {
+    if host == "localhost" || host.parse::<std::net::IpAddr>().is_ok() {
         "http"
     } else {
         "https"
@@ -539,7 +542,7 @@ fn format_image_ref(image_ref: &ImageRef, tag: &str) -> String {
     } else {
         &image_ref.registry
     };
-    format!("{}/{registry}:{tag}", image_ref.repository)
+    format!("{registry}/{}:{tag}", image_ref.repository)
 }
 
 /// Parse an image reference string into its components.
@@ -633,6 +636,9 @@ mod tests {
         assert_eq!(scheme_for_registry("localhost:5000"), "http");
         assert_eq!(scheme_for_registry("127.0.0.1"), "http");
         assert_eq!(scheme_for_registry("127.0.0.1:5001"), "http");
+        assert_eq!(scheme_for_registry("172.17.0.1"), "http");
+        assert_eq!(scheme_for_registry("172.17.0.1:55000"), "http");
+        assert_eq!(scheme_for_registry("192.168.1.100:5000"), "http");
     }
 
     #[test]
@@ -951,7 +957,7 @@ mod tests {
         };
         assert_eq!(
             format_image_ref(&image_ref, "1.0.0"),
-            "myorg/myapp/docker.io:1.0.0"
+            "docker.io/myorg/myapp:1.0.0"
         );
     }
 
@@ -964,7 +970,7 @@ mod tests {
         };
         assert_eq!(
             format_image_ref(&image_ref, "latest"),
-            "myorg/myapp/ghcr.io:latest"
+            "ghcr.io/myorg/myapp:latest"
         );
     }
 

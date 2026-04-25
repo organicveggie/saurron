@@ -7,7 +7,7 @@ use saurron::{
     update::UpdateEngine,
 };
 use testcontainers::{
-    ContainerAsync, GenericImage, ImageExt,
+    ContainerAsync, GenericImage,
     core::{IntoContainerPort, WaitFor},
     runners::AsyncRunner,
 };
@@ -32,22 +32,35 @@ fn docker_cmd(args: &[&str]) {
     assert!(status.success(), "docker {:?} failed", args);
 }
 
-/// Start a `registry:2` container and return its ephemeral host port.
+/// Start a `registry:2` container and return its ephemeral host port together
+/// with the host that can be used to reach it from the current process.
+///
+/// In environments where the test process runs inside a container (e.g. a
+/// devcontainer using Docker-from-Docker), `localhost` resolves to the
+/// container's own loopback — not the host — so `localhost:PORT` is
+/// unreachable.  testcontainers detects this via `/.dockerenv` and returns the
+/// Docker bridge gateway IP (e.g. `172.17.0.1`) instead, which IS reachable
+/// from within the container as well as from the host Docker daemon.
 ///
 /// The returned `ContainerAsync` must stay alive for the duration of the test
 /// (dropping it stops and removes the container).
-async fn start_local_registry() -> (ContainerAsync<GenericImage>, u16) {
+async fn start_local_registry() -> (ContainerAsync<GenericImage>, String, u16) {
     let container = GenericImage::new("registry", "2")
         .with_exposed_port(5000.tcp())
         .with_wait_for(WaitFor::message_on_stderr("listening on"))
         .start()
         .await
         .expect("failed to start local registry container");
+    let api_host = container
+        .get_host()
+        .await
+        .expect("failed to get registry host")
+        .to_string();
     let port = container
         .get_host_port_ipv4(5000.tcp())
         .await
         .expect("failed to get registry host port");
-    (container, port)
+    (container, api_host, port)
 }
 
 /// Tag `source_image` and push it to `registry_image`, returning the manifest
@@ -88,17 +101,20 @@ async fn docker_client_connect_and_ping() {
 #[tokio::test]
 #[ignore]
 async fn registry_freshness_up_to_date() {
-    let (_registry, port) = start_local_registry().await;
-    let image_ref = format!("localhost:{port}/testimage:stable");
+    let (_registry, api_host, port) = start_local_registry().await;
+
+    // Push via localhost (Docker daemon context); query via api_host (process context).
+    let docker_ref = format!("localhost:{port}/testimage:stable");
+    let api_ref = format!("{api_host}:{port}/testimage:stable");
 
     docker_cmd(&["pull", "busybox:latest"]);
-    let digest = tag_and_push("busybox:latest", &image_ref);
+    let digest = tag_and_push("busybox:latest", &docker_ref);
     assert!(!digest.is_empty(), "no digest from push");
 
     let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None)
         .expect("failed to build registry client");
     let result = client
-        .check_freshness(&image_ref, Some(&digest), false, NonSemverStrategy::Digest)
+        .check_freshness(&api_ref, Some(&digest), false, NonSemverStrategy::Digest)
         .await;
 
     assert!(
@@ -112,24 +128,26 @@ async fn registry_freshness_up_to_date() {
 #[tokio::test]
 #[ignore]
 async fn registry_freshness_stale_non_semver() {
-    let (_registry, port) = start_local_registry().await;
-    let image_ref = format!("localhost:{port}/testimage:stable");
+    let (_registry, api_host, port) = start_local_registry().await;
+
+    let docker_ref = format!("localhost:{port}/testimage:stable");
+    let api_ref = format!("{api_host}:{port}/testimage:stable");
 
     // Push busybox under the tag and record its digest.
     docker_cmd(&["pull", "busybox:latest"]);
-    let old_digest = tag_and_push("busybox:latest", &image_ref);
+    let old_digest = tag_and_push("busybox:latest", &docker_ref);
     assert!(!old_digest.is_empty(), "no digest from first push");
 
     // Overwrite the tag in the registry with a different image (alpine).
     docker_cmd(&["pull", "alpine:latest"]);
-    tag_and_push("alpine:latest", &image_ref);
+    tag_and_push("alpine:latest", &docker_ref);
 
     // check_freshness with the old (busybox) digest: registry now has alpine → Stale.
     let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None)
         .expect("failed to build registry client");
     let result = client
         .check_freshness(
-            &image_ref,
+            &api_ref,
             Some(&old_digest),
             false,
             NonSemverStrategy::Digest,
@@ -147,18 +165,20 @@ async fn registry_freshness_stale_non_semver() {
 #[tokio::test]
 #[ignore]
 async fn registry_freshness_semver_stale() {
-    let (_registry, port) = start_local_registry().await;
-    let v100 = format!("localhost:{port}/myapp:v1.0.0");
-    let v110 = format!("localhost:{port}/myapp:v1.1.0");
+    let (_registry, api_host, port) = start_local_registry().await;
+
+    let v100_docker = format!("localhost:{port}/myapp:v1.0.0");
+    let v110_docker = format!("localhost:{port}/myapp:v1.1.0");
+    let v100_api = format!("{api_host}:{port}/myapp:v1.0.0");
 
     docker_cmd(&["pull", "busybox:latest"]);
-    tag_and_push("busybox:latest", &v100);
-    tag_and_push("busybox:latest", &v110);
+    tag_and_push("busybox:latest", &v100_docker);
+    tag_and_push("busybox:latest", &v110_docker);
 
     let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None)
         .expect("failed to build registry client");
     let result = client
-        .check_freshness(&v100, None, false, NonSemverStrategy::Digest)
+        .check_freshness(&v100_api, None, false, NonSemverStrategy::Digest)
         .await;
 
     match result {
@@ -244,7 +264,16 @@ async fn webhook_dispatch_posts_to_local_server() {
 
 /// Ensures a container running an old SemVer image gets updated to the newer
 /// version by `UpdateEngine::run_cycle`, exercising the complete
-/// pull → stop → remove → create → start flow against a real Docker daemon.
+/// stop → remove → create → start flow against a real Docker daemon.
+///
+/// Images are pushed to `localhost:PORT` (the Docker daemon on the host always
+/// has access to this) then re-tagged locally under `api_host:PORT` so that:
+/// - `container.image` resolves to an address the in-process RegistryClient
+///   can reach via HTTP (gateway IP in devcontainer, localhost elsewhere), and
+/// - `docker run` uses the locally-cached image without needing a registry pull.
+///
+/// `--no-pull` avoids a bollard pull call that would fail on non-localhost
+/// registry addresses in devcontainer environments; the image is already local.
 #[tokio::test]
 #[ignore]
 async fn update_cycle_updates_stale_container() {
@@ -262,15 +291,26 @@ async fn update_cycle_updates_stale_container() {
     let _guard = CleanupGuard(CONTAINER);
 
     // 1. Local registry + two SemVer image versions.
-    let (_registry, port) = start_local_registry().await;
-    let v1 = format!("localhost:{port}/testapp:v1.0.0");
-    let v2 = format!("localhost:{port}/testapp:v1.1.0");
+    let (_registry, api_host, port) = start_local_registry().await;
+
+    // Docker CLI commands go through the daemon (host context) → localhost:PORT works.
+    let v1_docker = format!("localhost:{port}/testapp:v1.0.0");
+    let v2_docker = format!("localhost:{port}/testapp:v1.1.0");
+
+    // RegistryClient HTTP calls come from this process (devcontainer) → api_host:PORT works.
+    let v1_api = format!("{api_host}:{port}/testapp:v1.0.0");
+    let v2_api = format!("{api_host}:{port}/testapp:v1.1.0");
 
     docker_cmd(&["pull", "busybox:latest"]);
-    tag_and_push("busybox:latest", &v1);
-    tag_and_push("busybox:latest", &v2);
+    tag_and_push("busybox:latest", &v1_docker);
+    tag_and_push("busybox:latest", &v2_docker);
 
-    // 2. Start a container on the old version. Label enables opt-in selection.
+    // Re-tag both under the api_host prefix so they exist locally at that reference.
+    docker_cmd(&["tag", &v1_docker, &v1_api]);
+    docker_cmd(&["tag", &v2_docker, &v2_api]);
+
+    // 2. Start a container on the old version using the api_host image reference.
+    //    Docker finds the image locally (just tagged above) so no registry pull occurs.
     docker_cmd(&[
         "run",
         "-d",
@@ -278,7 +318,7 @@ async fn update_cycle_updates_stale_container() {
         CONTAINER,
         "-l",
         "saurron.enable=true",
-        &v1,
+        &v1_api,
         "sleep",
         "3600",
     ]);
@@ -287,7 +327,11 @@ async fn update_cycle_updates_stale_container() {
     let docker = DockerClient::connect(&default_docker_config()).expect("docker connect failed");
     let registry =
         RegistryClient::new(HeadWarnStrategy::Auto, "test", None).expect("registry client failed");
-    let config = Config::load(&Args::parse_from(["saurron"])).expect("config load failed");
+    // --no-pull: skip the bollard pull call so the update succeeds even when the
+    // Docker daemon can't reach api_host:PORT as an HTTP registry.  The v1.1.0
+    // image is already local (tagged above), so the restart succeeds anyway.
+    let config =
+        Config::load(&Args::parse_from(["saurron", "--no-pull"])).expect("config load failed");
 
     // Opt-in selector: only containers with saurron.enable=true.
     let selector = ContainerSelector::new(true, false, &[], &[], false, false);
