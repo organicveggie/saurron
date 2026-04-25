@@ -195,24 +195,23 @@ fn build_dependency_graph(
             }
         }
 
-        if let Some(inspect) = inspect_map.get(&c.name) {
-            if let Some(hc) = &inspect.host_config {
-                // 2. Docker --link
-                for link in hc.links.iter().flatten() {
-                    if let Some(target) = parse_link_target(link) {
-                        if name_set.contains(target.as_str()) {
-                            deps.push(target);
-                        }
-                    }
+        if let Some(inspect) = inspect_map.get(&c.name)
+            && let Some(hc) = &inspect.host_config
+        {
+            // 2. Docker --link
+            for link in hc.links.iter().flatten() {
+                if let Some(target) = parse_link_target(link)
+                    && name_set.contains(target.as_str())
+                {
+                    deps.push(target);
                 }
-                // 3. network_mode: container:<name>
-                if let Some(nm) = &hc.network_mode {
-                    if let Some(dep_name) = nm.strip_prefix("container:") {
-                        if name_set.contains(dep_name) {
-                            deps.push(dep_name.to_string());
-                        }
-                    }
-                }
+            }
+            // 3. network_mode: container:<name>
+            if let Some(nm) = &hc.network_mode
+                && let Some(dep_name) = nm.strip_prefix("container:")
+                && name_set.contains(dep_name)
+            {
+                deps.push(dep_name.to_string());
             }
         }
 

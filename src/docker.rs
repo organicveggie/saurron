@@ -59,9 +59,11 @@ pub enum ContainerState {
     Unknown(String),
 }
 
-impl ContainerState {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for ContainerState {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "created" => Self::Created,
             "restarting" => Self::Restarting,
             "running" => Self::Running,
@@ -70,7 +72,7 @@ impl ContainerState {
             "exited" => Self::Exited,
             "dead" => Self::Dead,
             other => Self::Unknown(other.to_string()),
-        }
+        })
     }
 }
 
@@ -242,10 +244,12 @@ impl ContainerSelector {
 
     /// Returns true if this container should be included in the update cycle.
     pub fn is_selected(&self, container: &ContainerInfo) -> bool {
-        if let Some(ref allowed) = self.allowed_names {
-            if !allowed.contains(&container.name) {
-                return false;
-            }
+        if self
+            .allowed_names
+            .as_ref()
+            .is_some_and(|a| !a.contains(&container.name))
+        {
+            return false;
         }
 
         if self.disabled_names.contains(&container.name) {
@@ -314,13 +318,14 @@ fn summary_to_info(s: bollard::models::ContainerSummary) -> Option<ContainerInfo
             .unwrap_or_default(),
         image: s.image.unwrap_or_default(),
         image_id: s.image_id.unwrap_or_default(),
-        state: ContainerState::from_str(
-            s.state
-                .as_ref()
-                .map(|s| s.to_string())
-                .as_deref()
-                .unwrap_or("unknown"),
-        ),
+        state: s
+            .state
+            .as_ref()
+            .map(|s| s.to_string())
+            .as_deref()
+            .unwrap_or("unknown")
+            .parse()
+            .unwrap(),
         labels: s.labels.unwrap_or_default(),
     })
 }
@@ -632,25 +637,40 @@ mod tests {
 
     #[test]
     fn container_state_known_variants() {
-        assert_eq!(ContainerState::from_str("created"), ContainerState::Created);
         assert_eq!(
-            ContainerState::from_str("restarting"),
+            "created".parse::<ContainerState>().unwrap(),
+            ContainerState::Created
+        );
+        assert_eq!(
+            "restarting".parse::<ContainerState>().unwrap(),
             ContainerState::Restarting
         );
-        assert_eq!(ContainerState::from_str("running"), ContainerState::Running);
         assert_eq!(
-            ContainerState::from_str("removing"),
+            "running".parse::<ContainerState>().unwrap(),
+            ContainerState::Running
+        );
+        assert_eq!(
+            "removing".parse::<ContainerState>().unwrap(),
             ContainerState::Removing
         );
-        assert_eq!(ContainerState::from_str("paused"), ContainerState::Paused);
-        assert_eq!(ContainerState::from_str("exited"), ContainerState::Exited);
-        assert_eq!(ContainerState::from_str("dead"), ContainerState::Dead);
+        assert_eq!(
+            "paused".parse::<ContainerState>().unwrap(),
+            ContainerState::Paused
+        );
+        assert_eq!(
+            "exited".parse::<ContainerState>().unwrap(),
+            ContainerState::Exited
+        );
+        assert_eq!(
+            "dead".parse::<ContainerState>().unwrap(),
+            ContainerState::Dead
+        );
     }
 
     #[test]
     fn container_state_unknown_preserved() {
         assert_eq!(
-            ContainerState::from_str("something-new"),
+            "something-new".parse::<ContainerState>().unwrap(),
             ContainerState::Unknown("something-new".to_string())
         );
     }
