@@ -4,7 +4,7 @@
 
 # Saurron
 
-[![Build Status](https://github.com/organicveggie/saurron/actions/workflows/rust.yml/badge.svg)](https://github.com/organicveggie/saurron/actions/workflows/rust.yml) [![Coverage Status](https://coveralls.io/repos/github/organicveggie/saurron/badge.svg?branch=main)](https://coveralls.io/github/organicveggie/saurron?branch=main) [![License](https://img.shields.io/github/license/organicveggie/saurron)](https://github.com/organicveggie/saurron/blob/master/LICENSE)
+[![Build Status](https://github.com/organicveggie/saurron/actions/workflows/rust.yml/badge.svg)](https://github.com/organicveggie/saurron/actions/workflows/rust.yml) [![Coverage Status](https://coveralls.io/repos/github/organicveggie/saurron/badge.svg?branch=main)](https://coveralls.io/github/organicveggie/saurron?branch=main) [![License](https://img.shields.io/github/license/organicveggie/saurron)](https://github.com/organicveggie/saurron/blob/master/LICENSE) [![Docker](https://ghcr-badge.egpl.dev/organicveggie/saurron/latest_tag?trim=major&label=ghcr.io)](https://github.com/organicveggie/saurron/pkgs/container/saurron)
 
 **Ever-watchful eye for your Docker containers.** Saurron monitors containers on a single host, detects newer images, and automatically updates them — with safe rollback, structured audit logging, and flexible notifications.
 
@@ -48,8 +48,8 @@ cargo build --release
 ### Docker
 
 ```bash
-# Build image (injects version string)
-docker build --build-arg SAURRON_BUILD_VERSION=v1.0.0 -t saurron:v1.0.0 .
+# Pull from GHCR
+docker pull ghcr.io/organicveggie/saurron:latest
 
 # Run — mount the Docker socket and a config file
 docker run -d \
@@ -57,17 +57,23 @@ docker run -d \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /etc/saurron/config.toml:/etc/saurron/config.toml:ro \
   --group-add "$(stat -c '%g' /var/run/docker.sock)" \
-  saurron:v1.0.0
+  ghcr.io/organicveggie/saurron:latest
 
 # Single update cycle
 docker run --rm \
   -v /var/run/docker.sock:/var/run/docker.sock \
   --group-add "$(stat -c '%g' /var/run/docker.sock)" \
-  saurron:v1.0.0 --run-once
+  ghcr.io/organicveggie/saurron:latest --run-once
+
+# Build from source (injects version string)
+docker build --build-arg SAURRON_BUILD_VERSION=v1.0.0 -t saurron:v1.0.0 .
 ```
 
 > The container runs as UID 1000 (non-root). The `--group-add` flag grants access
 > to the Docker socket by joining the socket's group on the host.
+>
+> Published images are multi-platform (`linux/amd64`, `linux/arm64`). Available
+> tags: `latest`, `edge` (latest `main`), and semver pins (`v1`, `v1.2`, `v1.2.3`).
 
 ### Run from binary
 
