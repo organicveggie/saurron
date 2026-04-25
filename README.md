@@ -4,7 +4,7 @@
 
 # Saurron
 
-[![Build Status](https://github.com/organicveggie/saurron/actions/workflows/rust.yml/badge.svg)](https://github.com/organicveggie/saurron/actions/workflows/rust.yml) [![Coverage Status](https://coveralls.io/repos/github/organicveggie/saurron/badge.svg?branch=main)](https://coveralls.io/github/organicveggie/saurron?branch=main) [![License](https://img.shields.io/github/license/organicveggie/saurron)](https://github.com/organicveggie/saurron/blob/master/LICENSE) [![Docker](https://ghcr-badge.egpl.dev/organicveggie/saurron/latest_tag?trim=major&label=ghcr.io)](https://github.com/organicveggie/saurron/pkgs/container/saurron)
+[![Build Status](https://github.com/organicveggie/saurron/actions/workflows/rust.yml/badge.svg)](https://github.com/organicveggie/saurron/actions/workflows/rust.yml) [![Coverage Status](https://coveralls.io/repos/github/organicveggie/saurron/badge.svg?branch=main)](https://coveralls.io/github/organicveggie/saurron?branch=main) [![License](https://img.shields.io/github/license/organicveggie/saurron)](https://github.com/organicveggie/saurron/blob/master/LICENSE) [![Docker](https://ghcr-badge.egpl.dev/organicveggie/saurron/tags?label=ghcr.io&trim=major)](https://github.com/organicveggie/saurron/pkgs/container/saurron)
 
 **Ever-watchful eye for your Docker containers.** Saurron monitors containers on a single host, detects newer images, and automatically updates them — with safe rollback, structured audit logging, and flexible notifications.
 
