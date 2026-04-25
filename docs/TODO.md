@@ -19,3 +19,14 @@ If you haven't hit the limit, each request to the API will return the following 
 If you have hit the limit, you will receive a response status of `429` and the `Retry-After` header in the response.
 
 The `Retry-After` header specifies the number of seconds to wait until you can call the API again.
+
+## Miscellaneous
+
+* Per-registry credential scoping. Separate username/password per registry; Docker config file credential source.
+* Dependent container restarts. Restart containers sharing networks or volumes with updated container.
+* Docker Hub inbound webhook format. Parse Docker Hub-specific webhook payloads.
+* Web UI: Dashboard for update history and manual triggers.
+* Lifecycle hooks. Pre/post-check and pre/post-update shell commands inside containers; EX_TEMPFAIL exit code to signal skip-without-failure
+* Notification template preview. Validate custom templates against synthetic data without real update cycle.
+* Scope-based multi-instance support. Multiple instances on same host managing non-overlapping container sets via scope label
+* Multiple instance detection. Detect duplicate instances sharing same scope; stop all but most recently created.
