@@ -620,7 +620,15 @@ impl<'a> UpdateEngine<'a> {
             }
         };
 
-        let image_for_check = image_info.name.as_deref().unwrap_or(&container.image);
+        // Only substitute the first RepoTag when the container was started from a
+        // bare digest — in that case container.image is "sha256:..." with no tag to
+        // query. For all normal tagged references, use container.image as-is so that
+        // the registry query targets the correct repo/tag, not a shared base image tag.
+        let image_for_check = if container.image.starts_with("sha256:") {
+            image_info.name.as_deref().unwrap_or(&container.image)
+        } else {
+            &container.image
+        };
         let labels = container.saurron_labels();
         let allow_pre = labels.semver_pre_release.unwrap_or(false);
         let strategy = labels

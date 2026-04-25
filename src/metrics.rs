@@ -72,9 +72,15 @@ pub fn record_skipped_cycle() {
 mod tests {
     use super::*;
     use crate::update::SessionReport;
+    use std::sync::Mutex;
+
+    // Serialise all metric tests: the prometheus counters are process-global, so
+    // concurrent tests would corrupt each other's before/after delta assertions.
+    static LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn all_metrics_appear_in_prometheus_text_output() {
+        let _g = LOCK.lock().unwrap();
         // Force initialisation of all statics.
         let _ = SCAN_CYCLES.get();
         let _ = SCAN_CYCLES_SKIPPED.get();
@@ -97,6 +103,7 @@ mod tests {
 
     #[test]
     fn record_cycle_increments_counters_correctly() {
+        let _g = LOCK.lock().unwrap();
         let before_cycles = SCAN_CYCLES.get();
         let before_scanned = CONTAINERS_SCANNED.get();
         let before_updated = CONTAINERS_UPDATED.get();
@@ -119,6 +126,7 @@ mod tests {
 
     #[test]
     fn record_cycle_counts_rolledback_in_scanned() {
+        let _g = LOCK.lock().unwrap();
         let before_scanned = CONTAINERS_SCANNED.get();
 
         let report = SessionReport {
@@ -132,6 +140,7 @@ mod tests {
 
     #[test]
     fn record_skipped_cycle_increments_by_one() {
+        let _g = LOCK.lock().unwrap();
         let before = SCAN_CYCLES_SKIPPED.get();
         record_skipped_cycle();
         assert_eq!(SCAN_CYCLES_SKIPPED.get() - before, 1);

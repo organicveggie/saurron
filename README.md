@@ -34,25 +34,42 @@ Inspired by [Watchtower](https://github.com/containrrr/watchtower).
 - **Notifications** — batched per-cycle reports dispatched to all configured targets concurrently; targets: webhook (HTTP POST, custom headers, optional TLS skip-verify), email (SMTP/STARTTLS via lettre), MQTT (MQTTv5 via rumqttc, QoS 0/1/2), Pushover; MiniJinja template rendering with configurable custom template; fires only on interesting cycles (any update, failure, or rollback)
 - **Prometheus metrics** — five `IntCounter` metrics exposed at `GET /v1/metrics`: `saurron_scan_cycles_total`, `saurron_scan_cycles_skipped_total` (HTTP 409 conflicts), `saurron_containers_scanned_total`, `saurron_containers_updated_total`, `saurron_containers_failed_total`
 
-### Planned
-- **Containerization** — multi-stage `Dockerfile`; full integration tests against a `docker-compose` fixture with a local registry
-
 ---
 
 ## Getting Started
 
-### Prerequisites
-
-- Rust (stable toolchain)
-- Docker daemon accessible via Unix socket or TCP
-
-### Build
+### Build from source
 
 ```bash
 cargo build --release
+./target/release/saurron --help
 ```
 
-### Run
+### Docker
+
+```bash
+# Build image (injects version string)
+docker build --build-arg SAURRON_BUILD_VERSION=v1.0.0 -t saurron:v1.0.0 .
+
+# Run — mount the Docker socket and a config file
+docker run -d \
+  --name saurron \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /etc/saurron/config.toml:/etc/saurron/config.toml:ro \
+  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+  saurron:v1.0.0
+
+# Single update cycle
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+  saurron:v1.0.0 --run-once
+```
+
+> The container runs as UID 1000 (non-root). The `--group-add` flag grants access
+> to the Docker socket by joining the socket's group on the host.
+
+### Run from binary
 
 ```bash
 # Connect to local Docker daemon and enumerate containers
