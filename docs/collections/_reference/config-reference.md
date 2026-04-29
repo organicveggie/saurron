@@ -39,14 +39,15 @@ All environment variables use the prefix `SAURRON_`.
 
 # General
 
-| Purpose                                                                | CLI Flag                | Environment Variable | TOML Key           |
-| :--------------------------------------------------------------------- | :---------------------- | :------------------- | :----------------- |
-| Path to TOML config file                                               | `--config <path>`       | `SAURRON_CONFIG`     | _(not applicable)_ |
-| Log level (`trace`, `debug`, `info`, `warn`, `error`). Default: `info` | `--log-level <level>`   | `SAURRON_LOG_LEVEL`  | `log_level`        |
-| Log format (`auto`, `json`, `logfmt`, `pretty`). Default: `auto`       | `--log-format <format>` | `SAURRON_LOG_FORMAT` | `log_format`       |
-| Shorthand for `--log-level debug`                                      | `--debug`               | —                    | —                  |
-| Shorthand for `--log-level trace`                                      | `--trace`               | —                    | —                  |
-| Path to append-only audit log file                                     | `--audit-log <path>`    | `SAURRON_AUDIT_LOG`  | `audit_log`        |
+| Purpose                                                                | CLI Flag                   | Environment Variable | TOML Key           |
+| :--------------------------------------------------------------------- | :------------------------- | :------------------- | :----------------- |
+| Path to TOML config file                                               | `--config <path>`          | `SAURRON_CONFIG`     | _(not applicable)_ |
+| Generate a sample TOML config file                                     | `--generate-config <path>` | -                    | _(not applicable)_ |
+| Log level (`trace`, `debug`, `info`, `warn`, `error`). Default: `info` | `--log-level <level>`      | `SAURRON_LOG_LEVEL`  | `log_level`        |
+| Log format (`auto`, `json`, `logfmt`, `pretty`). Default: `auto`       | `--log-format <format>`    | `SAURRON_LOG_FORMAT` | `log_format`       |
+| Shorthand for `--log-level debug`                                      | `--debug`                  | —                    | —                  |
+| Shorthand for `--log-level trace`                                      | `--trace`                  | —                    | —                  |
+| Path to append-only audit log file                                     | `--audit-log <path>`       | `SAURRON_AUDIT_LOG`  | `audit_log`        |
 
 # HTTP API
 

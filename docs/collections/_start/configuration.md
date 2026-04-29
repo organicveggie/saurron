@@ -77,17 +77,45 @@ specified in the config file.
 
 ## Config file
 
-The optional configuration file uses TOML syntax. Key features of TOML include:
+The optional configuration file uses [TOML syntax](https://toml.io/en). Key features of TOML
+include:
 
 - Maps unambiguously to a hash table
 - Supports inline comments
 - Includes native types: KV pairs, arrays, tables, inline tables, arrays of tables, integers,
   floats, bools, dates, and times
 
-See [toml.io](https://toml.io/en/) for the full TOML spec.
-
 The config file path defaults to `/etc/saurron/config.toml`. You can override this via the
 `--config` CLI flag or the `SAURRON_CONFIG` environment variable.
+
+To generate a sample config file, use the `--generate-config {path}` command. By default, without
+the optional `{path}` parameter, this command will stream the config to standard out. Include the
+optional `{path}` parameter to save the generated config using the specified filename.
+
+<!-- prettier-ignore-start -->
+### Examples
+{: .no_toc }
+
+#### Docker
+{: .no_toc }
+
+<!-- prettier-ignore-end -->
+
+```shell
+docker run --name saurron \
+    ghcr.io/organicveggie/saurron:latest \
+    --generate-config /etc/saurron.toml
+```
+
+<!-- prettier-ignore-start -->
+#### Binary
+{: .no_toc }
+
+<!-- prettier-ignore-end -->
+
+```shell
+saurron --generate-config
+```
 
 ## Details
 
