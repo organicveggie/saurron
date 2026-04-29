@@ -522,6 +522,164 @@ impl Config {
     }
 }
 
+/// Return a fully-commented sample TOML config string covering every supported
+/// option with its default value. Uncommented lines use real defaults; optional
+/// or disabled settings are commented out with example values.
+///
+/// The output is valid TOML and can be loaded directly by [`Config::load`].
+pub fn generate_sample_config() -> String {
+    r#"# Saurron configuration file
+# Generate a fresh copy with: saurron --generate-config [FILE]
+
+# Log verbosity: trace, debug, info, warn, error
+log_level = "info"
+
+# Log format: auto (detects TTY → pretty, pipe → logfmt), json, logfmt, pretty
+log_format = "auto"
+
+# Append-only JSON audit log (optional; omit to disable)
+# audit_log = "/var/log/saurron/audit.log"
+
+# How often to check for updates, e.g. "5m", "1h", "3600"
+# Mutually exclusive with `schedule` and `run_once`.
+# poll_interval = "24h"
+
+# Cron expression for update schedule, e.g. "0 3 * * *"
+# Mutually exclusive with `poll_interval` and `run_once`.
+# schedule = ""
+
+# Exit after a single update cycle instead of running continuously.
+run_once = false
+
+# Registry credentials (or path to a Docker secret file)
+# registry_username = ""
+# registry_password = ""
+
+# How to handle a failed manifest HEAD request:
+#   auto   — warn on unexpected errors, silent on auth failures
+#   always — always warn
+#   never  — always log at debug level
+head_warn_strategy = "auto"
+
+[docker]
+# Docker daemon socket or TCP address
+host = "unix:///var/run/docker.sock"
+# Verify TLS certificates for TCP connections
+tls_verify = false
+# TLS certificate paths (required when tls_verify = true)
+# tls_ca_cert = ""
+# tls_cert = ""
+# tls_key = ""
+# Override the negotiated Docker API version, e.g. "1.44"
+# api_version = ""
+
+# ── Container selection ─────────────────────────────────────────────────────
+
+# Opt-in mode: only update containers with the saurron.enable=true label.
+label_enable = false
+
+# Containers to always exclude from updates (TOML array of names).
+disable_containers = []
+
+# If non-empty, only update containers in this allow-list.
+containers = []
+
+# Include containers in the "restarting" state.
+include_restarting = false
+
+# When true, global settings take precedence over per-container saurron.* labels.
+global_takes_precedence = false
+
+# Also start stopped (exited/created) containers when a newer image is found.
+revive_stopped = false
+
+# ── Update behaviour ────────────────────────────────────────────────────────
+
+# Detect stale images but never restart containers.
+monitor_only = false
+
+# Skip pulling the new image; use whatever is already cached locally.
+no_pull = false
+
+# Remove the old image after a successful update.
+cleanup = false
+
+# How long to wait for a container to stop gracefully before sending SIGKILL.
+stop_timeout = "10s"
+
+[rollback]
+# Roll back if the new container exits with a non-zero code.
+on_exit_code = true
+# Roll back if the new container's Docker healthcheck reports unhealthy.
+on_healthcheck = true
+# Roll back if the container does not reach the running state within startup_timeout.
+on_timeout = true
+# How long to wait for the new container to become healthy before rolling back.
+startup_timeout = "30s"
+
+[http_api]
+# Enable the POST /v1/update endpoint.
+update = false
+# Enable the GET /v1/metrics endpoint.
+metrics = false
+# Bearer token required for authenticated endpoints (or path to a Docker secret file).
+# token = ""
+# Port the HTTP server listens on.
+port = 8080
+# Allow unauthenticated access to GET /v1/metrics.
+metrics_no_auth = false
+
+[notifications]
+# Delay between cycle completion and notification dispatch, e.g. "0s", "30s".
+delay = "0s"
+# Path to a custom MiniJinja notification template file (optional).
+# template = ""
+
+[notifications.webhook]
+# HTTP endpoint to POST update reports to (enables webhook notifications).
+# url = ""
+# Extra request headers as comma-separated "Key: Value" pairs.
+# headers = ""
+# Skip TLS certificate verification for the webhook endpoint.
+tls_skip_verify = false
+
+[notifications.email]
+# SMTP server hostname (required to enable email notifications).
+# server = ""
+# SMTP server port.
+port = 587
+# Sender address (required).
+# from = ""
+# Recipient addresses (required; TOML array).
+# to = []
+# SMTP credentials (optional).
+# user = ""
+# password = ""
+# Skip TLS certificate verification for the SMTP connection.
+tls_skip_verify = false
+
+[notifications.mqtt]
+# MQTT broker address, e.g. "tcp://broker.example.com:1883" (required to enable MQTT).
+# broker = ""
+# Topic to publish update reports to (required).
+# topic = ""
+# QoS level: 0 (at most once), 1 (at least once), 2 (exactly once).
+qos = 0
+# Client ID sent to the broker (auto-generated if omitted).
+# client_id = ""
+# Broker credentials (optional).
+# username = ""
+# password = ""
+
+[notifications.pushover]
+# Pushover application token (required to enable Pushover notifications).
+# token = ""
+# Pushover user or group key (required).
+# user_key = ""
+"#
+    .to_string()
+}
+
 /// If `value` is the path to a readable file, return its contents (trimmed).
 /// Otherwise return the value unchanged. Enables Docker secrets.
 fn resolve_secret_file(value: &str) -> Result<String> {
@@ -767,6 +925,57 @@ mod tests {
         let email = cfg.notifications.email.unwrap();
         assert_eq!(email.user, Some("user@example.com".to_string()));
         assert_eq!(email.password, Some("s3cr3t".to_string()));
+    }
+
+    #[test]
+    fn generate_sample_config_is_valid_toml() {
+        let output = generate_sample_config();
+        config::Config::builder()
+            .add_source(config::File::from_str(&output, config::FileFormat::Toml))
+            .build()
+            .expect("generate_sample_config must produce valid TOML");
+    }
+
+    #[test]
+    fn generate_sample_config_loads_with_defaults() {
+        let output = generate_sample_config();
+        let path = std::env::temp_dir().join("saurron_sample_config_test.toml");
+        std::fs::write(&path, &output).unwrap();
+        let cfg = Config::load(&args(&["--config", path.to_str().unwrap()])).unwrap();
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(cfg.log_level, LogLevel::Info);
+        assert_eq!(cfg.log_format, LogFormat::Auto);
+        assert_eq!(cfg.stop_timeout, "10s");
+        assert_eq!(cfg.http_api.port, 8080);
+        assert!(cfg.rollback.on_exit_code);
+        assert!(cfg.rollback.on_healthcheck);
+        assert!(cfg.rollback.on_timeout);
+        assert_eq!(cfg.rollback.startup_timeout, "30s");
+        assert!(cfg.notifications.webhook.is_none());
+        assert!(cfg.notifications.email.is_none());
+        assert!(cfg.notifications.mqtt.is_none());
+        assert!(cfg.notifications.pushover.is_none());
+    }
+
+    #[test]
+    fn generate_sample_config_contains_all_sections() {
+        let output = generate_sample_config();
+        for section in &[
+            "[docker]",
+            "[rollback]",
+            "[http_api]",
+            "[notifications]",
+            "[notifications.webhook]",
+            "[notifications.email]",
+            "[notifications.mqtt]",
+            "[notifications.pushover]",
+        ] {
+            assert!(
+                output.contains(section),
+                "missing section {section} in generated config"
+            );
+        }
     }
 
     #[test]

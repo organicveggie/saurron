@@ -101,6 +101,20 @@ async fn shutdown_signal() {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = cli::Args::parse();
+
+    // Handle --generate-config before loading config or connecting to Docker,
+    // so it works even when no config file or Docker daemon is present.
+    if let Some(dest) = &args.generate_config {
+        let content = config::generate_sample_config();
+        if dest == "-" {
+            print!("{content}");
+        } else {
+            std::fs::write(dest, &content)
+                .with_context(|| format!("failed to write config to '{dest}'"))?;
+        }
+        return Ok(());
+    }
+
     let config = config::Config::load(&args)?;
     let _guard = init_tracing(&config)?;
 

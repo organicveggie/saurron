@@ -10,6 +10,11 @@ use serde::Deserialize;
 )]
 pub struct Args {
     // === General ===
+    /// Write a sample config file with all options and their defaults, then exit.
+    /// Writes to FILE if given, or stdout if omitted.
+    #[arg(long, value_name = "FILE", num_args = 0..=1, default_missing_value = "-")]
+    pub generate_config: Option<String>,
+
     /// Path to TOML config file (default: /etc/saurron/config.toml)
     #[arg(long, env = "SAURRON_CONFIG", value_name = "PATH")]
     pub config: Option<String>,
