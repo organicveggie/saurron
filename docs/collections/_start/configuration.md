@@ -15,18 +15,20 @@ title: Configuration
 # Overview
 
 Saurron uses a layered configuration that can include TOML file, environment variables, and CLI
-flags. Options specified through higher precedence sources override options specified through lower
-precedence sources. Precedence order (from highest to lowest):
+flags. Options specified through higher priority sources override options specified through lower
+priority sources. Option priority order from highest to lowest is:
 
 1. **CLI flags**
 2. **Environment variables**
 3. **Config file** (TOML format)
 4. **Built-in defaults**
 
-All sources support all options. The config file path defaults to `/etc/saurron/config.toml`. You
-can override this via the `--config` CLI flag or the `SAURRON_CONFIG` environment variable.
+All sources support all options.
 
-## Secret File Resolution
+See [config reference]({% link _reference/config-reference.md %}) for the complete list of every
+configuration option.
+
+# Secret file resolution
 
 For a subset of configuration options, if the value of the option is a path to a readable file,
 Saurron transparently replaces the value with the file contents at startup. This enables Docker
@@ -53,7 +55,49 @@ Options supporting file contents substitution:
 - `notifications.webhook.url`
 - `registry_password`
 
-## See also
+# Options
 
-See [config reference]({% link _reference/config-reference.md %}) for the complete list of every
-configuration option.
+## Command line flags
+
+All options on the command line have a long form, which looks like `--long-form-option <value>`.
+Some more common options have a single-letter short form as well, which look like `-f <value>`. Some
+options take multiple arguments, which are always separated by commands:
+
+```shell
+--variadic-option arg1,arg2,arg3
+```
+
+Command line flags have the _highest_ priority and override options from any other source.
+
+## Environment variables
+
+With the exception of the standard Docker options, all environment variables start with the prefix
+`SAURRON_`. Environment variables have the _second_ highest priority and will override options
+specified in the config file.
+
+## Config file
+
+The optional configuration file uses TOML syntax. Key features of TOML include:
+
+- Maps unambiguously to a hash table
+- Supports inline comments
+- Includes native types: KV pairs, arrays, tables, inline tables, arrays of tables, integers,
+  floats, bools, dates, and times
+
+See [toml.io](https://toml.io/en/) for the full TOML spec.
+
+The config file path defaults to `/etc/saurron/config.toml`. You can override this via the
+`--config` CLI flag or the `SAURRON_CONFIG` environment variable.
+
+## Details
+
+### Docker
+
+| Purpose                                                                  | CLI Flag                  | Environment Variable | TOML Key             |
+| :----------------------------------------------------------------------- | :------------------------ | :------------------- | :------------------- |
+| Docker daemon socket or host URL. Default: `unix:///var/run/docker.sock` | `--host <uri>`            | `DOCKER_HOST`        | `docker.host`        |
+| Enable TLS for Docker daemon connection                                  | `--tlsverify`             | `DOCKER_TLS_VERIFY`  | `docker.tls_verify`  |
+| Path to TLS CA certificate                                               | `--tls-ca-cert <path>`    | `DOCKER_CERT_PATH`   | `docker.tls_ca_cert` |
+| Path to TLS client certificate                                           | `--tls-cert <path>`       | —                    | `docker.tls_cert`    |
+| Path to TLS client key                                                   | `--tls-key <path>`        | —                    | `docker.tls_key`     |
+| Docker API version to negotiate. Default: auto-negotiate                 | `--api-version <version>` | `DOCKER_API_VERSION` | `docker.api_version` |
