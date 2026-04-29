@@ -1,0 +1,19 @@
+source "https://rubygems.org"
+ruby ">= 4.0.0"
+
+# The gems used to be loaded from the standard library, but are not part of the default gems since Ruby 3.4.0.
+gem "csv"
+gem "base64"
+gem "bigdecimal"
+gem "kramdown-parser-gfm"
+gem "webrick"
+
+gem "liquid", ">= 4.0.4"
+gem "jekyll", ">= 4.4.0"
+gem "jekyll-feed"
+gem "jekyll-mermaid", ">= 1.0.0"
+gem "jekyll-seo-tag", ">= 2.8.0"
+gem "jekyll-sitemap", ">= 1.4.0"
+
+gem "just-the-docs"
+
