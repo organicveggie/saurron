@@ -3,7 +3,16 @@ layout: page
 title: Configuration
 ---
 
+<!-- prettier-ignore-start -->
 # Saurron Configuration
+{: .no_toc }
+
+* TOC
+{:toc}
+
+<!-- prettier-ignore-end -->
+
+# Overview
 
 Saurron uses a layered configuration that can include TOML file, environment variables, and CLI
 flags. Options specified through higher precedence sources override options specified through lower

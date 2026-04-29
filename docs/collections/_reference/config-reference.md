@@ -3,11 +3,16 @@ layout: page
 title: Configuration reference
 ---
 
+<!-- prettier-ignore-start -->
 # Table of contents
+{: .no_toc }
 
 * TOC
 {:toc}
 
+<!-- prettier-ignore-end -->
+
+<!-- prettier-ignore -->
 {: .note}
 All environment variables use the prefix `SAURRON_`.
 
