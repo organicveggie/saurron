@@ -34,7 +34,8 @@
 	"postCreateCommand": "bundle install && bundle exec jekyll --version",
 
 	// Use 'postStartCommand' to run commands every time the container is started.
-    "postStartCommand": "bundle exec jekyll serve --baseurl='' --livereload --force_polling"
+    // "postStartCommand": "bundle exec jekyll serve --baseurl='' --livereload --force_polling --config _local_config.yml"
+	"postStartCommand": "bash ./.devcontainer/local-jekyll-serve.sh"
 
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"

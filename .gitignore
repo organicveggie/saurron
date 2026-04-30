@@ -29,3 +29,5 @@ tarpaulin-report.json
 tarpaulin-report.html
 
 *.profraw
+
+docs/_local_config.yml
