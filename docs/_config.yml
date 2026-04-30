@@ -10,9 +10,10 @@ url: "" # the base hostname & protocol for your site, e.g. http://example.com
 github_username:  organicveggie
 
 # Build settings
-theme: just-the-docs
+remote_theme: just-the-docs/just-the-docs@latest
 plugins:
   - jekyll-feed
+  - jekyll-remote-theme
   - jekyll-seo-tag
   - jekyll-sitemap
 
