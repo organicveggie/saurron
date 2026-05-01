@@ -10,7 +10,10 @@ nav_order: 1
 * TOC
 {:toc}
 
-# Docker run
+{: .note }
+Details on how to install Docker can be found on the [official Docker website](https://docs.docker.com/get-docker/).
+
+# Docker CLI
 
 ```shell
 # Pull from GHCR

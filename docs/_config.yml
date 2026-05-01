@@ -41,7 +41,7 @@ just_the_docs:
       name: DEVELOPMENT
 
 aux_links:
-  Saurron on GitHub:
+  GitHub:
     - https://github.com/organicveggie/saurron
 
 mermaid:
