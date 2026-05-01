@@ -14,7 +14,7 @@ gem "jekyll", ">= 4.4.0"
 group :jekyll_plugins do
     gem "jekyll-feed"
     gem "jekyll-mermaid", ">= 1.0.0"
-    gem "jekyll-remote-theme"
+    # gem "jekyll-remote-theme"
     gem "jekyll-seo-tag", ">= 2.8.0"
     gem "jekyll-sitemap", ">= 1.4.0"
 end
