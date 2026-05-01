@@ -10,11 +10,9 @@ url: "https://organicveggie.github.io" # the base hostname & protocol for your s
 github_username:  organicveggie
 
 # Build settings
-# remote_theme: just-the-docs/just-the-docs@latest
 theme: just-the-docs
 plugins:
   - jekyll-feed
-  # - jekyll-remote-theme
   - jekyll-seo-tag
   - jekyll-sitemap
 
