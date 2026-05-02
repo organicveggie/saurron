@@ -21,7 +21,6 @@ Saurron is a free and open source software application which monitors containers
     Opt-in mode.
 - **Docker client** - Connects via Unix socket or TLS-secured TCP. Configurable API version.
     Verifies daemon reachability on startup.
-- **Docker secrets support** - TODO
 - **Freshness detection** - SemVer tag ranking with strict 2.0.0 grammar. Non-SemVer digest comparison.
     Per-container overrides. Configurable `--head-warn-strategy` for failed manifest HEAD requests.
 - **Graceful shutdown** - `SIGTERM`/`SIGINT` wait for in-progress update cycle to complete before
