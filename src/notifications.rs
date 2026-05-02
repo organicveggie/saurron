@@ -249,7 +249,7 @@ pub async fn send_mqtt(cfg: &MqttConfig, body: &str) -> Result<()> {
         opts.set_credentials(u.as_str(), p.as_bytes().to_vec());
     }
 
-    let (client, mut eventloop) = AsyncClient::new(opts, 16);
+    let (client, mut eventloop) = AsyncClient::builder(opts).capacity(16).build_async();
 
     // Spawn the event loop driver.
     let driver = tokio::spawn(async move {
