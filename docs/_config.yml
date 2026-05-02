@@ -11,6 +11,7 @@ github_username:  organicveggie
 
 # Build settings
 theme: just-the-docs
+color_scheme: dark
 plugins:
   - jekyll-feed
   - jekyll-seo-tag
@@ -41,7 +42,7 @@ just_the_docs:
       name: DEVELOPMENT
 
 aux_links:
-  GitHub:
+  "GitHub <span class='material-symbols-outlined'>open_in_new</span>":
     - https://github.com/organicveggie/saurron
 
 mermaid:

@@ -1,9 +1,11 @@
 ---
 layout: home
-title: Home
+title: Introduction
 permalink: /
 nav_order: 1
 ---
+
+# Introduction
 
 Welcome to the Saurron documentation.
 
