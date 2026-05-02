@@ -82,18 +82,6 @@ docker run --name saurron \
 ```shell
 saurron --generate-config /etc/saurron.toml
 ```
-# Options
-
-## Docker
-
-| Purpose                                                                  | CLI Flag                  | Environment Variable | TOML Key             |
-| :----------------------------------------------------------------------- | :------------------------ | :------------------- | :------------------- |
-| Docker daemon socket or host URL. Default: `unix:///var/run/docker.sock` | `--host <uri>`            | `DOCKER_HOST`        | `docker.host`        |
-| Enable TLS for Docker daemon connection                                  | `--tlsverify`             | `DOCKER_TLS_VERIFY`  | `docker.tls_verify`  |
-| Path to TLS CA certificate                                               | `--tls-ca-cert <path>`    | `DOCKER_CERT_PATH`   | `docker.tls_ca_cert` |
-| Path to TLS client certificate                                           | `--tls-cert <path>`       | —                    | `docker.tls_cert`    |
-| Path to TLS client key                                                   | `--tls-key <path>`        | —                    | `docker.tls_key`     |
-| Docker API version to negotiate. Default: auto-negotiate                 | `--api-version <version>` | `DOCKER_API_VERSION` | `docker.api_version` |
 
 # Secret file resolution
 
