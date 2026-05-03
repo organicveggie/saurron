@@ -51,3 +51,33 @@ Once you have created or downloaded the compose file, you can deploy it with the
 ```shell
 docker compose -f saurron-compose.yaml up -d
 ```
+
+# Pre-built binaries
+
+Download a tarball for your platform from the [latest release](https://github.com/organicveggie/saurron/releases/latest):
+
+```bash
+# Linux amd64
+curl -Lo saurron.tar.gz https://github.com/organicveggie/saurron/releases/latest/download/saurron-latest-linux-amd64.tar.gz
+tar -xzf saurron.tar.gz
+./saurron --help
+```
+
+## Run from binary
+
+```bash
+# Connect to local Docker daemon and enumerate containers
+./saurron
+
+# Single update cycle, then exit
+./saurron --run-once
+
+# Monitor only — detect stale images but do not update
+./saurron --monitor-only
+
+# JSON log output
+./saurron --log-format json
+
+# Write audit events to a dedicated file
+./saurron --audit-log /var/log/saurron/audit.log
+```
