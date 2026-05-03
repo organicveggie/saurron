@@ -35,11 +35,14 @@ All five medium-priority items were fixed in `src/update.rs` (`ContainerRunConfi
 
 ### Lower priority
 
-| Field | Impact |
+All six lower-priority items were fixed in `src/update.rs` (`ContainerRunConfig`,
+`extract_run_config`, `build_create_config`).
+
+| Field | Status |
 | --- | --- |
-| `sysctls` | Kernel parameter overrides (`--sysctl`) are not preserved. |
-| `pid_mode` | PID namespace sharing (`--pid`) is dropped. |
-| `ipc_mode` | IPC namespace sharing (`--ipc`) is dropped. |
-| `userns_mode` | User namespace remapping (`--userns`) is dropped. |
-| `readonly_rootfs` | Read-only root filesystem flag (`--read-only`) is not preserved. |
-| `pids_limit` | Per-container PID limit is dropped. |
+| `sysctls` | **Fixed** — kernel parameter overrides are now preserved. |
+| `pid_mode` | **Fixed** — PID namespace sharing is now preserved. |
+| `ipc_mode` | **Fixed** — IPC namespace sharing is now preserved. |
+| `userns_mode` | **Fixed** — user namespace remapping is now preserved. |
+| `readonly_rootfs` | **Fixed** — read-only root filesystem flag is now preserved. |
+| `pids_limit` | **Fixed** — per-container PID limit is now preserved. |
