@@ -48,6 +48,8 @@ pub struct ContainerRunConfig {
     pub stop_signal: Option<String>,
     pub labels: Option<HashMap<String, String>>,
     pub exposed_ports: Option<Vec<String>>,
+    pub healthcheck: Option<bollard::models::HealthConfig>,
+    pub volumes: Option<Vec<String>>,
     // from ContainerInspectResponse.host_config
     pub binds: Option<Vec<String>>,
     pub volumes_from: Option<Vec<String>>,
@@ -64,6 +66,8 @@ pub struct ContainerRunConfig {
     pub shm_size: Option<i64>,
     pub ulimits: Option<Vec<bollard::models::ResourcesUlimits>>,
     pub init: Option<bool>,
+    pub group_add: Option<Vec<String>>,
+    pub mounts: Option<Vec<bollard::models::Mount>>,
     // from ContainerInspectResponse.network_settings.networks
     pub networks: Option<HashMap<String, bollard::models::EndpointSettings>>,
 }
@@ -86,6 +90,8 @@ fn extract_run_config(inspect: &bollard::models::ContainerInspectResponse) -> Co
         stop_signal: cfg.and_then(|c| c.stop_signal.clone()),
         labels: cfg.and_then(|c| c.labels.clone()),
         exposed_ports: cfg.and_then(|c| c.exposed_ports.clone()),
+        healthcheck: cfg.and_then(|c| c.healthcheck.clone()),
+        volumes: cfg.and_then(|c| c.volumes.clone()),
         binds: hc.and_then(|h| h.binds.clone()),
         volumes_from: hc.and_then(|h| h.volumes_from.clone()),
         port_bindings: hc.and_then(|h| h.port_bindings.clone()),
@@ -101,6 +107,8 @@ fn extract_run_config(inspect: &bollard::models::ContainerInspectResponse) -> Co
         shm_size: hc.and_then(|h| h.shm_size),
         ulimits: hc.and_then(|h| h.ulimits.clone()),
         init: hc.and_then(|h| h.init),
+        group_add: hc.and_then(|h| h.group_add.clone()),
+        mounts: hc.and_then(|h| h.mounts.clone()),
         networks: ns.and_then(|n| n.networks.clone()),
     }
 }
@@ -134,6 +142,8 @@ fn build_create_config(
         shm_size: run_cfg.shm_size,
         ulimits: run_cfg.ulimits.clone(),
         init: run_cfg.init,
+        group_add: run_cfg.group_add.clone(),
+        mounts: run_cfg.mounts.clone(),
         ..Default::default()
     });
 
@@ -154,6 +164,8 @@ fn build_create_config(
         stop_signal: effective_stop_signal,
         labels: run_cfg.labels.clone(),
         exposed_ports: run_cfg.exposed_ports.clone(),
+        healthcheck: run_cfg.healthcheck.clone(),
+        volumes: run_cfg.volumes.clone(),
         image: Some(new_image.to_string()),
         host_config,
         networking_config,
@@ -1315,6 +1327,10 @@ mod tests {
             shm_size: None,
             ulimits: None,
             init: None,
+            group_add: None,
+            mounts: None,
+            healthcheck: None,
+            volumes: None,
             networks: None,
         }
     }
@@ -1665,6 +1681,152 @@ mod tests {
         assert_eq!(hc.privileged, Some(true));
         assert_eq!(hc.shm_size, Some(67_108_864));
         assert_eq!(hc.init, Some(true));
+    }
+
+    // ── extract_run_config / build_create_config — high-priority bug fixes ──────
+
+    #[test]
+    fn extract_run_config_copies_group_add() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                group_add: Some(vec!["999".to_string(), "docker".to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(
+            run_cfg.group_add,
+            Some(vec!["999".to_string(), "docker".to_string()])
+        );
+    }
+
+    #[test]
+    fn extract_run_config_copies_healthcheck() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            config: Some(bollard::models::ContainerConfig {
+                healthcheck: Some(bollard::models::HealthConfig {
+                    test: Some(vec![
+                        "CMD".to_string(),
+                        "curl".to_string(),
+                        "-f".to_string(),
+                        "http://localhost/health".to_string(),
+                    ]),
+                    interval: Some(30_000_000_000),
+                    timeout: Some(10_000_000_000),
+                    retries: Some(3),
+                    start_period: Some(5_000_000_000),
+                    start_interval: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        let hc = run_cfg.healthcheck.expect("healthcheck should be Some");
+        assert_eq!(
+            hc.test,
+            Some(vec![
+                "CMD".to_string(),
+                "curl".to_string(),
+                "-f".to_string(),
+                "http://localhost/health".to_string(),
+            ])
+        );
+        assert_eq!(hc.retries, Some(3));
+    }
+
+    #[test]
+    fn extract_run_config_copies_mounts() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                mounts: Some(vec![bollard::models::Mount {
+                    target: Some("/data".to_string()),
+                    source: Some("myvolume".to_string()),
+                    typ: Some(bollard::models::MountTypeEnum::VOLUME),
+                    read_only: Some(false),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        let mounts = run_cfg.mounts.expect("mounts should be Some");
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].target, Some("/data".to_string()));
+        assert_eq!(mounts[0].source, Some("myvolume".to_string()));
+    }
+
+    #[test]
+    fn extract_run_config_copies_volumes() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            config: Some(bollard::models::ContainerConfig {
+                volumes: Some(vec!["/data".to_string(), "/cache".to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(
+            run_cfg.volumes,
+            Some(vec!["/data".to_string(), "/cache".to_string()])
+        );
+    }
+
+    #[test]
+    fn build_create_config_copies_group_add() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.group_add = Some(vec!["999".to_string()]);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        assert_eq!(
+            cfg.host_config.unwrap().group_add,
+            Some(vec!["999".to_string()])
+        );
+    }
+
+    #[test]
+    fn build_create_config_copies_healthcheck() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.healthcheck = Some(bollard::models::HealthConfig {
+            test: Some(vec!["CMD-SHELL".to_string(), "exit 0".to_string()]),
+            retries: Some(2),
+            ..Default::default()
+        });
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let hc = cfg.healthcheck.expect("healthcheck should be set on body");
+        assert_eq!(
+            hc.test,
+            Some(vec!["CMD-SHELL".to_string(), "exit 0".to_string()])
+        );
+        assert_eq!(hc.retries, Some(2));
+    }
+
+    #[test]
+    fn build_create_config_copies_mounts() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.mounts = Some(vec![bollard::models::Mount {
+            target: Some("/data".to_string()),
+            source: Some("myvolume".to_string()),
+            typ: Some(bollard::models::MountTypeEnum::VOLUME),
+            ..Default::default()
+        }]);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let mounts = cfg
+            .host_config
+            .unwrap()
+            .mounts
+            .expect("mounts should be set");
+        assert_eq!(mounts.len(), 1);
+        assert_eq!(mounts[0].target, Some("/data".to_string()));
+    }
+
+    #[test]
+    fn build_create_config_copies_volumes() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.volumes = Some(vec!["/data".to_string()]);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        assert_eq!(cfg.volumes, Some(vec!["/data".to_string()]));
     }
 
     // ── SessionReport::record ─────────────────────────────────────────────────
