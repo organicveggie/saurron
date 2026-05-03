@@ -118,13 +118,8 @@ async fn main() -> anyhow::Result<()> {
     let config = config::Config::load(&args)?;
     let _guard = init_tracing(&config)?;
 
-    info!(
-        version = VERSION,
-        docker_host = %config.docker.host,
-        run_once = config.run_once,
-        monitor_only = config.monitor_only,
-        "Saurron starting"
-    );
+    info!(version = VERSION, "Saurron starting");
+    config.log_settings();
 
     // Validate HTTP API token config before binding any ports.
     http::validate_token_config(&config.http_api)?;
