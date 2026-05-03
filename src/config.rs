@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use tracing::info;
 
 use crate::cli::{Args, HeadWarnStrategy, LogFormat, LogLevel};
 
@@ -520,6 +521,118 @@ impl Config {
         }
         Ok(())
     }
+
+    /// Log all resolved config values at INFO level. Sensitive fields are
+    /// redacted; optional fields show `<not set>` when absent.
+    pub fn log_settings(&self) {
+        info!(
+            log_level = ?self.log_level,
+            log_format = ?self.log_format,
+            audit_log = self.audit_log.as_deref().unwrap_or("<not set>"),
+            poll_interval = self.poll_interval.as_deref().unwrap_or("<not set>"),
+            schedule = self.schedule.as_deref().unwrap_or("<not set>"),
+            run_once = self.run_once,
+            head_warn_strategy = ?self.head_warn_strategy,
+            registry_username = self.registry_username.as_deref().unwrap_or("<not set>"),
+            registry_password = redact_opt(&self.registry_password),
+            "config: general"
+        );
+        info!(
+            host = %self.docker.host,
+            tls_verify = self.docker.tls_verify,
+            tls_ca_cert = self.docker.tls_ca_cert.as_deref().unwrap_or("<not set>"),
+            tls_cert = self.docker.tls_cert.as_deref().unwrap_or("<not set>"),
+            tls_key = self.docker.tls_key.as_deref().unwrap_or("<not set>"),
+            api_version = self.docker.api_version.as_deref().unwrap_or("<not set>"),
+            "config: docker"
+        );
+        info!(
+            label_enable = self.label_enable,
+            disable_containers = %self.disable_containers.join(", "),
+            containers = %self.containers.join(", "),
+            include_restarting = self.include_restarting,
+            global_takes_precedence = self.global_takes_precedence,
+            revive_stopped = self.revive_stopped,
+            "config: container_selection"
+        );
+        info!(
+            monitor_only = self.monitor_only,
+            no_pull = self.no_pull,
+            cleanup = self.cleanup,
+            stop_timeout = %self.stop_timeout,
+            "config: update"
+        );
+        info!(
+            on_exit_code = self.rollback.on_exit_code,
+            on_healthcheck = self.rollback.on_healthcheck,
+            on_timeout = self.rollback.on_timeout,
+            startup_timeout = %self.rollback.startup_timeout,
+            "config: rollback"
+        );
+        info!(
+            update = self.http_api.update,
+            metrics = self.http_api.metrics,
+            port = self.http_api.port,
+            metrics_no_auth = self.http_api.metrics_no_auth,
+            token = redact_opt(&self.http_api.token),
+            "config: http_api"
+        );
+        info!(
+            delay = %self.notifications.general.delay,
+            template_is_set = self.notifications.general.template.is_some(),
+            "config: notifications"
+        );
+        if let Some(ref wh) = self.notifications.webhook {
+            info!(
+                enabled = true,
+                url = %wh.url,
+                tls_skip_verify = wh.tls_skip_verify,
+                headers = redact_opt(&wh.headers),
+                "config: notifications.webhook"
+            );
+        } else {
+            info!(enabled = false, "config: notifications.webhook");
+        }
+        if let Some(ref e) = self.notifications.email {
+            info!(
+                enabled = true,
+                from = %e.from,
+                to = %e.to.join(", "),
+                server = %e.server,
+                port = e.port,
+                user = e.user.as_deref().unwrap_or("<not set>"),
+                password = redact_opt(&e.password),
+                tls_skip_verify = e.tls_skip_verify,
+                "config: notifications.email"
+            );
+        } else {
+            info!(enabled = false, "config: notifications.email");
+        }
+        if let Some(ref m) = self.notifications.mqtt {
+            info!(
+                enabled = true,
+                broker = %m.broker,
+                topic = %m.topic,
+                qos = m.qos,
+                client_id = m.client_id.as_deref().unwrap_or("<not set>"),
+                username = m.username.as_deref().unwrap_or("<not set>"),
+                password = redact_opt(&m.password),
+                "config: notifications.mqtt"
+            );
+        } else {
+            info!(enabled = false, "config: notifications.mqtt");
+        }
+        if self.notifications.pushover.is_some() {
+            info!(
+                enabled = true,
+                token = "[REDACTED]",
+                user_key = "[REDACTED]",
+                "config: notifications.pushover"
+            );
+        } else {
+            info!(enabled = false, "config: notifications.pushover");
+        }
+    }
 }
 
 /// Return a fully-commented sample TOML config string covering every supported
@@ -690,6 +803,14 @@ fn resolve_secret_file(value: &str) -> Result<String> {
         Ok(contents.trim_end().to_string())
     } else {
         Ok(value.to_string())
+    }
+}
+
+fn redact_opt(opt: &Option<String>) -> &'static str {
+    if opt.is_some() {
+        "[REDACTED]"
+    } else {
+        "<not set>"
     }
 }
 
@@ -997,5 +1118,43 @@ mod tests {
         assert_eq!(mqtt.client_id, Some("client-1".to_string()));
         assert_eq!(mqtt.username, Some("mqttuser".to_string()));
         assert_eq!(mqtt.password, Some("mqttpass".to_string()));
+    }
+
+    #[test]
+    fn log_settings_default_config() {
+        let cfg = Config::load(&args(&[])).unwrap();
+        cfg.log_settings();
+    }
+
+    #[test]
+    fn log_settings_all_notifications_configured() {
+        let cfg = Config::load(&args(&[
+            "--webhook-url",
+            "https://example.com/hook",
+            "--webhook-headers",
+            "X-Token:abc",
+            "--notification-email-from",
+            "from@example.com",
+            "--notification-email-to",
+            "to@example.com",
+            "--notification-email-server",
+            "smtp.example.com",
+            "--notification-mqtt-broker",
+            "tcp://broker.example.com:1883",
+            "--notification-mqtt-topic",
+            "saurron/updates",
+            "--notification-pushover-token",
+            "tok123",
+            "--notification-pushover-user-key",
+            "user456",
+            "--http-api-token",
+            "apitoken",
+            "--registry-username",
+            "user",
+            "--registry-password",
+            "pass",
+        ]))
+        .unwrap();
+        cfg.log_settings();
     }
 }
