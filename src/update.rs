@@ -236,6 +236,23 @@ fn build_create_config(
     }
 }
 
+// ── Docker error helpers ──────────────────────────────────────────────────────
+
+/// If `e` wraps a `bollard::errors::Error::DockerResponseServerError`, return
+/// the HTTP status code and daemon message as separate values so they can be
+/// logged as individual structured fields.  Returns `None` for all other error
+/// types, including non-Docker bollard errors.
+fn extract_docker_server_error(e: &anyhow::Error) -> Option<(u16, String)> {
+    use bollard::errors::Error as DockerError;
+    match e.downcast_ref::<DockerError>() {
+        Some(DockerError::DockerResponseServerError {
+            status_code,
+            message,
+        }) => Some((*status_code, message.clone())),
+        _ => None,
+    }
+}
+
 // ── Dependency graph + topological sort ──────────────────────────────────────
 
 fn parse_link_target(link: &str) -> Option<String> {
@@ -930,12 +947,22 @@ impl<'a> UpdateEngine<'a> {
         if cfg.cleanup {
             info!(container = %container.name, image = %old_image, "removing old image");
             if let Err(e) = self.docker.remove_image(&old_image).await {
-                warn!(
-                    container = %container.name,
-                    image = %old_image,
-                    error = %e,
-                    "old image removal failed (non-fatal)"
-                );
+                if let Some((http_status, docker_message)) = extract_docker_server_error(&e) {
+                    warn!(
+                        container = %container.name,
+                        image = %old_image,
+                        http_status,
+                        docker_message,
+                        "old image removal failed (non-fatal)"
+                    );
+                } else {
+                    warn!(
+                        container = %container.name,
+                        image = %old_image,
+                        error = %format!("{e:#}"),
+                        "old image removal failed (non-fatal)"
+                    );
+                }
             }
         }
 
@@ -2158,6 +2185,35 @@ mod tests {
         assert_eq!(hc.sysctls, Some(sysctls));
         assert_eq!(hc.readonly_rootfs, Some(true));
         assert_eq!(hc.pids_limit, Some(100));
+    }
+
+    // ── extract_docker_server_error ───────────────────────────────────────────
+
+    #[test]
+    fn extract_docker_server_error_returns_status_and_message() {
+        let e = anyhow::anyhow!(bollard::errors::Error::DockerResponseServerError {
+            status_code: 409,
+            message: "conflict: image is in use by container abc".to_string(),
+        });
+        assert_eq!(
+            extract_docker_server_error(&e),
+            Some((
+                409,
+                "conflict: image is in use by container abc".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn extract_docker_server_error_returns_none_for_other_bollard_errors() {
+        let e = anyhow::anyhow!(bollard::errors::Error::RequestTimeoutError);
+        assert!(extract_docker_server_error(&e).is_none());
+    }
+
+    #[test]
+    fn extract_docker_server_error_returns_none_for_non_bollard_errors() {
+        let e = anyhow::anyhow!("something went wrong");
+        assert!(extract_docker_server_error(&e).is_none());
     }
 
     // ── SessionReport::record ─────────────────────────────────────────────────
