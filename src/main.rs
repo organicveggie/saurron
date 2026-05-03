@@ -115,10 +115,14 @@ async fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    let config = config::Config::load(&args)?;
+    let (config, config_status) = config::Config::load(&args)?;
     let _guard = init_tracing(&config)?;
 
     info!(version = VERSION, "Saurron starting");
+    config_status.log();
+    if config_status.is_error() {
+        return Err(anyhow::anyhow!("failed to load config file"));
+    }
     config.log_settings();
 
     // Validate HTTP API token config before binding any ports.

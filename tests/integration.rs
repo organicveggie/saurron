@@ -330,8 +330,9 @@ async fn update_cycle_updates_stale_container() {
     // --no-pull: skip the bollard pull call so the update succeeds even when the
     // Docker daemon can't reach api_host:PORT as an HTTP registry.  The v1.1.0
     // image is already local (tagged above), so the restart succeeds anyway.
-    let config =
-        Config::load(&Args::parse_from(["saurron", "--no-pull"])).expect("config load failed");
+    let config = Config::load(&Args::parse_from(["saurron", "--no-pull"]))
+        .expect("config load failed")
+        .0;
 
     // Opt-in selector: only containers with saurron.enable=true.
     let selector = ContainerSelector::new(true, false, &[], &[], false, false);

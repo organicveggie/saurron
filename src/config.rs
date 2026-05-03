@@ -109,6 +109,69 @@ pub struct PushoverConfig {
     pub user_key: String,
 }
 
+/// Outcome of the config-file read step inside [`Config::load`].
+///
+/// Returned alongside the resolved [`Config`] so callers can log it after
+/// tracing is initialised. Errors are not propagated as `Err` from `load` so
+/// they can be emitted via the structured logger rather than stderr.
+#[derive(Debug)]
+pub enum ConfigFileStatus {
+    /// File was found and parsed successfully.
+    Loaded { path: String, user_specified: bool },
+    /// Default path had no file; built-in defaults are in effect.
+    DefaultNotFound { path: String },
+    /// User-specified file does not exist.
+    NotFound { path: String },
+    /// File exists but could not be parsed or deserialised.
+    Invalid {
+        path: String,
+        user_specified: bool,
+        reason: String,
+    },
+}
+
+impl ConfigFileStatus {
+    /// Returns `true` for variants that represent a configuration error.
+    pub fn is_error(&self) -> bool {
+        matches!(self, Self::NotFound { .. } | Self::Invalid { .. })
+    }
+
+    /// Emits a structured log event at the appropriate level.
+    pub fn log(&self) {
+        use tracing::error;
+        match self {
+            Self::Loaded {
+                path,
+                user_specified: true,
+            } => {
+                info!(path = %path, "config file loaded");
+            }
+            Self::Loaded {
+                path,
+                user_specified: false,
+            } => {
+                info!(path = %path, "config file loaded (default path)");
+            }
+            Self::DefaultNotFound { path } => {
+                info!(
+                    path = %path,
+                    "config file not found at default path, using built-in defaults"
+                );
+            }
+            Self::NotFound { path } => {
+                error!(path = %path, "config file not found");
+            }
+            Self::Invalid {
+                path,
+                user_specified,
+                reason,
+            } => {
+                error!(path = %path, user_specified, reason = %reason, "config file is invalid");
+            }
+        }
+    }
+}
+
 // ── TOML-deserializable partial types (all fields Optional) ──────────────────
 
 #[derive(Debug, Default, Deserialize)]
@@ -217,19 +280,73 @@ struct PartialPushoverConfig {
 // ── Config loading ────────────────────────────────────────────────────────────
 
 impl Config {
-    /// Load config from TOML file → env vars → CLI flags, with built-in defaults
-    /// as the base layer. Secret file resolution applied after merge.
-    pub fn load(args: &Args) -> Result<Self> {
+    /// Load config from TOML file → CLI flags, with built-in defaults as the
+    /// base layer. Secret file resolution applied after merge.
+    ///
+    /// Config-file errors are captured in [`ConfigFileStatus`] rather than
+    /// returned as `Err`, so callers can log them after tracing is initialised.
+    /// `Err` is reserved for `resolve_secrets` failures.
+    pub fn load(args: &Args) -> Result<(Self, ConfigFileStatus)> {
         let config_path = args.config.as_deref().unwrap_or("/etc/saurron/config.toml");
+        let user_specified = args.config.is_some();
 
-        let partial: PartialConfig = config::Config::builder()
+        if !std::path::Path::new(config_path).is_file() {
+            let status = if user_specified {
+                ConfigFileStatus::NotFound {
+                    path: config_path.to_string(),
+                }
+            } else {
+                ConfigFileStatus::DefaultNotFound {
+                    path: config_path.to_string(),
+                }
+            };
+            return Ok((Self::defaults_from_args(args)?, status));
+        }
+
+        let built = match config::Config::builder()
             .add_source(config::File::with_name(config_path).required(false))
             .build()
-            .context("failed to build config")?
-            .try_deserialize()
-            .unwrap_or_default();
+        {
+            Ok(b) => b,
+            Err(e) => {
+                return Ok((
+                    Self::defaults_from_args(args)?,
+                    ConfigFileStatus::Invalid {
+                        path: config_path.to_string(),
+                        user_specified,
+                        reason: e.to_string(),
+                    },
+                ));
+            }
+        };
+
+        let partial: PartialConfig = match built.try_deserialize() {
+            Ok(p) => p,
+            Err(e) => {
+                return Ok((
+                    Self::defaults_from_args(args)?,
+                    ConfigFileStatus::Invalid {
+                        path: config_path.to_string(),
+                        user_specified,
+                        reason: e.to_string(),
+                    },
+                ));
+            }
+        };
 
         let mut cfg = Self::merge(args, partial);
+        cfg.resolve_secrets()?;
+        Ok((
+            cfg,
+            ConfigFileStatus::Loaded {
+                path: config_path.to_string(),
+                user_specified,
+            },
+        ))
+    }
+
+    fn defaults_from_args(args: &Args) -> Result<Self> {
+        let mut cfg = Self::merge(args, PartialConfig::default());
         cfg.resolve_secrets()?;
         Ok(cfg)
     }
@@ -826,9 +943,13 @@ mod tests {
         Args::parse_from(cmd)
     }
 
+    fn load_cfg(extra: &[&str]) -> Config {
+        Config::load(&args(extra)).unwrap().0
+    }
+
     #[test]
     fn defaults_without_config_file() {
-        let cfg = Config::load(&args(&[])).unwrap();
+        let cfg = load_cfg(&[]);
         assert_eq!(cfg.log_level, LogLevel::Info);
         assert_eq!(cfg.log_format, LogFormat::Auto);
         assert!(!cfg.monitor_only);
@@ -843,44 +964,44 @@ mod tests {
 
     #[test]
     fn cli_debug_flag_sets_log_level() {
-        let cfg = Config::load(&args(&["--debug"])).unwrap();
+        let cfg = load_cfg(&["--debug"]);
         assert_eq!(cfg.log_level, LogLevel::Debug);
     }
 
     #[test]
     fn cli_trace_flag_sets_log_level() {
-        let cfg = Config::load(&args(&["--trace"])).unwrap();
+        let cfg = load_cfg(&["--trace"]);
         assert_eq!(cfg.log_level, LogLevel::Trace);
     }
 
     #[test]
     fn no_rollback_flags_override_defaults() {
-        let cfg = Config::load(&args(&["--no-rollback-on-exit-code"])).unwrap();
+        let cfg = load_cfg(&["--no-rollback-on-exit-code"]);
         assert!(!cfg.rollback.on_exit_code);
         assert!(cfg.rollback.on_healthcheck);
     }
 
     #[test]
     fn run_once_flag() {
-        let cfg = Config::load(&args(&["--run-once"])).unwrap();
+        let cfg = load_cfg(&["--run-once"]);
         assert!(cfg.run_once);
     }
 
     #[test]
     fn monitor_only_flag() {
-        let cfg = Config::load(&args(&["--monitor-only"])).unwrap();
+        let cfg = load_cfg(&["--monitor-only"]);
         assert!(cfg.monitor_only);
     }
 
     #[test]
     fn no_pull_flag() {
-        let cfg = Config::load(&args(&["--no-pull"])).unwrap();
+        let cfg = load_cfg(&["--no-pull"]);
         assert!(cfg.no_pull);
     }
 
     #[test]
     fn webhook_url_creates_webhook_config() {
-        let cfg = Config::load(&args(&["--webhook-url", "https://example.com/hook"])).unwrap();
+        let cfg = load_cfg(&["--webhook-url", "https://example.com/hook"]);
         let wh = cfg.notifications.webhook.expect("webhook should be Some");
         assert_eq!(wh.url, "https://example.com/hook");
         assert!(!wh.tls_skip_verify);
@@ -888,19 +1009,19 @@ mod tests {
 
     #[test]
     fn pushover_absent_without_both_fields() {
-        let cfg = Config::load(&args(&["--notification-pushover-token", "tok123"])).unwrap();
+        let cfg = load_cfg(&["--notification-pushover-token", "tok123"]);
         assert!(cfg.notifications.pushover.is_none());
     }
 
     #[test]
     fn resolve_secret_file_non_path_returns_literal() {
-        let cfg = Config::load(&args(&["--registry-password", "plaintextpassword"])).unwrap();
+        let cfg = load_cfg(&["--registry-password", "plaintextpassword"]);
         assert_eq!(cfg.registry_password, Some("plaintextpassword".to_string()));
     }
 
     #[test]
     fn no_rollback_on_healthcheck_flag() {
-        let cfg = Config::load(&args(&["--no-rollback-on-healthcheck"])).unwrap();
+        let cfg = load_cfg(&["--no-rollback-on-healthcheck"]);
         assert!(!cfg.rollback.on_healthcheck);
         assert!(cfg.rollback.on_exit_code);
         assert!(cfg.rollback.on_timeout);
@@ -908,7 +1029,7 @@ mod tests {
 
     #[test]
     fn no_rollback_on_timeout_flag() {
-        let cfg = Config::load(&args(&["--no-rollback-on-timeout"])).unwrap();
+        let cfg = load_cfg(&["--no-rollback-on-timeout"]);
         assert!(!cfg.rollback.on_timeout);
         assert!(cfg.rollback.on_exit_code);
         assert!(cfg.rollback.on_healthcheck);
@@ -916,15 +1037,14 @@ mod tests {
 
     #[test]
     fn email_config_with_all_required_fields() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--notification-email-from",
             "from@example.com",
             "--notification-email-to",
             "to@example.com",
             "--notification-email-server",
             "smtp.example.com",
-        ]))
-        .unwrap();
+        ]);
         let email = cfg.notifications.email.expect("email should be Some");
         assert_eq!(email.from, "from@example.com");
         assert_eq!(email.to, vec!["to@example.com".to_string()]);
@@ -937,25 +1057,23 @@ mod tests {
 
     #[test]
     fn email_absent_without_server() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--notification-email-from",
             "from@example.com",
             "--notification-email-to",
             "to@example.com",
-        ]))
-        .unwrap();
+        ]);
         assert!(cfg.notifications.email.is_none());
     }
 
     #[test]
     fn mqtt_config_with_broker_and_topic() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--notification-mqtt-broker",
             "tcp://broker.example.com:1883",
             "--notification-mqtt-topic",
             "saurron/updates",
-        ]))
-        .unwrap();
+        ]);
         let mqtt = cfg.notifications.mqtt.expect("mqtt should be Some");
         assert_eq!(mqtt.broker, "tcp://broker.example.com:1883");
         assert_eq!(mqtt.topic, "saurron/updates");
@@ -967,23 +1085,21 @@ mod tests {
 
     #[test]
     fn mqtt_absent_without_topic() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--notification-mqtt-broker",
             "tcp://broker.example.com:1883",
-        ]))
-        .unwrap();
+        ]);
         assert!(cfg.notifications.mqtt.is_none());
     }
 
     #[test]
     fn pushover_config_with_both_fields() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--notification-pushover-token",
             "tok123",
             "--notification-pushover-user-key",
             "user456",
-        ]))
-        .unwrap();
+        ]);
         let po = cfg.notifications.pushover.expect("pushover should be Some");
         assert_eq!(po.token, "tok123");
         assert_eq!(po.user_key, "user456");
@@ -994,7 +1110,7 @@ mod tests {
         let path = std::env::temp_dir().join("saurron_test_webhook_url.txt");
         std::fs::write(&path, "https://secret-hook.example.com/hook").unwrap();
         let path_str = path.to_str().unwrap().to_string();
-        let cfg = Config::load(&args(&["--webhook-url", &path_str])).unwrap();
+        let cfg = load_cfg(&["--webhook-url", &path_str]);
         std::fs::remove_file(&path).ok();
         let wh = cfg.notifications.webhook.expect("webhook should be Some");
         assert_eq!(wh.url, "https://secret-hook.example.com/hook");
@@ -1002,13 +1118,13 @@ mod tests {
 
     #[test]
     fn http_api_token_resolves_literal() {
-        let cfg = Config::load(&args(&["--http-api-token", "mytoken"])).unwrap();
+        let cfg = load_cfg(&["--http-api-token", "mytoken"]);
         assert_eq!(cfg.http_api.token, Some("mytoken".to_string()));
     }
 
     #[test]
     fn notification_template_resolves_literal() {
-        let cfg = Config::load(&args(&["--notification-template", "Updated: {{name}}"])).unwrap();
+        let cfg = load_cfg(&["--notification-template", "Updated: {{name}}"]);
         assert_eq!(
             cfg.notifications.general.template,
             Some("Updated: {{name}}".to_string())
@@ -1017,20 +1133,19 @@ mod tests {
 
     #[test]
     fn webhook_headers_resolves_literal() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--webhook-url",
             "https://example.com/hook",
             "--webhook-headers",
             "X-Token:abc123",
-        ]))
-        .unwrap();
+        ]);
         let wh = cfg.notifications.webhook.unwrap();
         assert_eq!(wh.headers, Some("X-Token:abc123".to_string()));
     }
 
     #[test]
     fn email_with_auth_credentials() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--notification-email-from",
             "from@example.com",
             "--notification-email-to",
@@ -1041,8 +1156,7 @@ mod tests {
             "user@example.com",
             "--notification-email-password",
             "s3cr3t",
-        ]))
-        .unwrap();
+        ]);
         let email = cfg.notifications.email.unwrap();
         assert_eq!(email.user, Some("user@example.com".to_string()));
         assert_eq!(email.password, Some("s3cr3t".to_string()));
@@ -1062,7 +1176,7 @@ mod tests {
         let output = generate_sample_config();
         let path = std::env::temp_dir().join("saurron_sample_config_test.toml");
         std::fs::write(&path, &output).unwrap();
-        let cfg = Config::load(&args(&["--config", path.to_str().unwrap()])).unwrap();
+        let cfg = load_cfg(&["--config", path.to_str().unwrap()]);
         std::fs::remove_file(&path).ok();
 
         assert_eq!(cfg.log_level, LogLevel::Info);
@@ -1101,7 +1215,7 @@ mod tests {
 
     #[test]
     fn mqtt_with_optional_fields() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--notification-mqtt-broker",
             "tcp://broker.example.com:1883",
             "--notification-mqtt-topic",
@@ -1112,8 +1226,7 @@ mod tests {
             "mqttuser",
             "--notification-mqtt-password",
             "mqttpass",
-        ]))
-        .unwrap();
+        ]);
         let mqtt = cfg.notifications.mqtt.unwrap();
         assert_eq!(mqtt.client_id, Some("client-1".to_string()));
         assert_eq!(mqtt.username, Some("mqttuser".to_string()));
@@ -1122,13 +1235,13 @@ mod tests {
 
     #[test]
     fn log_settings_default_config() {
-        let cfg = Config::load(&args(&[])).unwrap();
+        let cfg = load_cfg(&[]);
         cfg.log_settings();
     }
 
     #[test]
     fn log_settings_all_notifications_configured() {
-        let cfg = Config::load(&args(&[
+        let cfg = load_cfg(&[
             "--webhook-url",
             "https://example.com/hook",
             "--webhook-headers",
@@ -1153,8 +1266,104 @@ mod tests {
             "user",
             "--registry-password",
             "pass",
-        ]))
-        .unwrap();
+        ]);
         cfg.log_settings();
+    }
+
+    #[test]
+    fn config_status_loaded_user_specified() {
+        let path = std::env::temp_dir().join("saurron_test_config_loaded.toml");
+        std::fs::write(&path, "run_once = true").unwrap();
+        let (cfg, status) = Config::load(&args(&["--config", path.to_str().unwrap()])).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert!(matches!(
+            status,
+            ConfigFileStatus::Loaded {
+                user_specified: true,
+                ..
+            }
+        ));
+        assert!(!status.is_error());
+        assert!(cfg.run_once);
+    }
+
+    #[test]
+    fn config_status_default_not_found() {
+        // Default path /etc/saurron/config.toml does not exist in the test env.
+        let (_, status) = Config::load(&args(&[])).unwrap();
+        assert!(matches!(status, ConfigFileStatus::DefaultNotFound { .. }));
+        assert!(!status.is_error());
+    }
+
+    #[test]
+    fn config_status_not_found_user_specified() {
+        let (_, status) =
+            Config::load(&args(&["--config", "/nonexistent/saurron_test_path.toml"])).unwrap();
+        assert!(matches!(status, ConfigFileStatus::NotFound { .. }));
+        assert!(status.is_error());
+    }
+
+    #[test]
+    fn config_status_invalid_bad_toml() {
+        let path = std::env::temp_dir().join("saurron_test_config_bad_toml.toml");
+        std::fs::write(&path, "not valid toml [[[").unwrap();
+        let (_, status) = Config::load(&args(&["--config", path.to_str().unwrap()])).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert!(matches!(status, ConfigFileStatus::Invalid { .. }));
+        assert!(status.is_error());
+    }
+
+    #[test]
+    fn config_status_invalid_wrong_types() {
+        let path = std::env::temp_dir().join("saurron_test_config_bad_types.toml");
+        // Valid TOML but wrong type: run_once expects bool, not an array.
+        std::fs::write(&path, "run_once = [\"a\", \"b\"]").unwrap();
+        let (_, status) = Config::load(&args(&["--config", path.to_str().unwrap()])).unwrap();
+        std::fs::remove_file(&path).ok();
+        assert!(matches!(status, ConfigFileStatus::Invalid { .. }));
+        assert!(status.is_error());
+    }
+
+    #[test]
+    fn config_status_is_error() {
+        assert!(ConfigFileStatus::NotFound { path: "p".into() }.is_error());
+        assert!(
+            ConfigFileStatus::Invalid {
+                path: "p".into(),
+                user_specified: true,
+                reason: "r".into(),
+            }
+            .is_error()
+        );
+        assert!(
+            !ConfigFileStatus::Loaded {
+                path: "p".into(),
+                user_specified: true,
+            }
+            .is_error()
+        );
+        assert!(!ConfigFileStatus::DefaultNotFound { path: "p".into() }.is_error());
+    }
+
+    #[test]
+    fn config_status_log_all_variants() {
+        ConfigFileStatus::Loaded {
+            path: "p".into(),
+            user_specified: true,
+        }
+        .log();
+        ConfigFileStatus::Loaded {
+            path: "p".into(),
+            user_specified: false,
+        }
+        .log();
+        ConfigFileStatus::DefaultNotFound { path: "p".into() }.log();
+        ConfigFileStatus::NotFound { path: "p".into() }.log();
+        ConfigFileStatus::Invalid {
+            path: "p".into(),
+            user_specified: false,
+            reason: "r".into(),
+        }
+        .log();
     }
 }

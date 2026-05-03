@@ -75,7 +75,7 @@ mod tests {
         let mut cmd = vec!["saurron"];
         cmd.extend_from_slice(extra_args);
         let args = Args::parse_from(cmd);
-        Config::load(&args).expect("config load failed")
+        Config::load(&args).expect("config load failed").0
     }
 
     #[test]
