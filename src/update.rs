@@ -83,6 +83,12 @@ pub struct ContainerRunConfig {
     pub dns_search: Option<Vec<String>>,
     pub dns_options: Option<Vec<String>>,
     pub runtime: Option<String>,
+    pub sysctls: Option<HashMap<String, String>>,
+    pub pid_mode: Option<String>,
+    pub ipc_mode: Option<String>,
+    pub userns_mode: Option<String>,
+    pub readonly_rootfs: Option<bool>,
+    pub pids_limit: Option<i64>,
     // from ContainerInspectResponse.network_settings.networks
     pub networks: Option<HashMap<String, bollard::models::EndpointSettings>>,
 }
@@ -139,6 +145,12 @@ fn extract_run_config(inspect: &bollard::models::ContainerInspectResponse) -> Co
         dns_search: hc.and_then(|h| h.dns_search.clone()),
         dns_options: hc.and_then(|h| h.dns_options.clone()),
         runtime: hc.and_then(|h| h.runtime.clone()),
+        sysctls: hc.and_then(|h| h.sysctls.clone()),
+        pid_mode: hc.and_then(|h| h.pid_mode.clone()),
+        ipc_mode: hc.and_then(|h| h.ipc_mode.clone()),
+        userns_mode: hc.and_then(|h| h.userns_mode.clone()),
+        readonly_rootfs: hc.and_then(|h| h.readonly_rootfs),
+        pids_limit: hc.and_then(|h| h.pids_limit),
         networks: ns.and_then(|n| n.networks.clone()),
     }
 }
@@ -189,6 +201,12 @@ fn build_create_config(
         dns_search: run_cfg.dns_search.clone(),
         dns_options: run_cfg.dns_options.clone(),
         runtime: run_cfg.runtime.clone(),
+        sysctls: run_cfg.sysctls.clone(),
+        pid_mode: run_cfg.pid_mode.clone(),
+        ipc_mode: run_cfg.ipc_mode.clone(),
+        userns_mode: run_cfg.userns_mode.clone(),
+        readonly_rootfs: run_cfg.readonly_rootfs,
+        pids_limit: run_cfg.pids_limit,
         ..Default::default()
     });
 
@@ -1389,6 +1407,12 @@ mod tests {
             dns_search: None,
             dns_options: None,
             runtime: None,
+            sysctls: None,
+            pid_mode: None,
+            ipc_mode: None,
+            userns_mode: None,
+            readonly_rootfs: None,
+            pids_limit: None,
             healthcheck: None,
             volumes: None,
             networks: None,
@@ -2047,6 +2071,93 @@ mod tests {
         run_cfg.runtime = Some("nvidia".to_string());
         let cfg = build_create_config(&run_cfg, "img:latest", None);
         assert_eq!(cfg.host_config.unwrap().runtime, Some("nvidia".to_string()));
+    }
+
+    // ── extract_run_config / build_create_config — lower-priority bug fixes ─────
+
+    #[test]
+    fn extract_run_config_copies_sysctls() {
+        let mut sysctls = HashMap::new();
+        sysctls.insert("net.ipv4.ip_forward".to_string(), "1".to_string());
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                sysctls: Some(sysctls.clone()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(extract_run_config(&inspect).sysctls, Some(sysctls));
+    }
+
+    #[test]
+    fn extract_run_config_copies_pid_ipc_userns_mode() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                pid_mode: Some("host".to_string()),
+                ipc_mode: Some("shareable".to_string()),
+                userns_mode: Some("host".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(run_cfg.pid_mode, Some("host".to_string()));
+        assert_eq!(run_cfg.ipc_mode, Some("shareable".to_string()));
+        assert_eq!(run_cfg.userns_mode, Some("host".to_string()));
+    }
+
+    #[test]
+    fn extract_run_config_copies_readonly_rootfs() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                readonly_rootfs: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(extract_run_config(&inspect).readonly_rootfs, Some(true));
+    }
+
+    #[test]
+    fn extract_run_config_copies_pids_limit() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                pids_limit: Some(100),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        assert_eq!(extract_run_config(&inspect).pids_limit, Some(100));
+    }
+
+    #[test]
+    fn build_create_config_copies_pid_ipc_userns_mode() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.pid_mode = Some("host".to_string());
+        run_cfg.ipc_mode = Some("shareable".to_string());
+        run_cfg.userns_mode = Some("host".to_string());
+        let hc = build_create_config(&run_cfg, "img:latest", None)
+            .host_config
+            .unwrap();
+        assert_eq!(hc.pid_mode, Some("host".to_string()));
+        assert_eq!(hc.ipc_mode, Some("shareable".to_string()));
+        assert_eq!(hc.userns_mode, Some("host".to_string()));
+    }
+
+    #[test]
+    fn build_create_config_copies_sysctls_readonly_pids_limit() {
+        let mut run_cfg = default_run_cfg();
+        let mut sysctls = HashMap::new();
+        sysctls.insert("net.ipv4.ip_forward".to_string(), "1".to_string());
+        run_cfg.sysctls = Some(sysctls.clone());
+        run_cfg.readonly_rootfs = Some(true);
+        run_cfg.pids_limit = Some(100);
+        let hc = build_create_config(&run_cfg, "img:latest", None)
+            .host_config
+            .unwrap();
+        assert_eq!(hc.sysctls, Some(sysctls));
+        assert_eq!(hc.readonly_rootfs, Some(true));
+        assert_eq!(hc.pids_limit, Some(100));
     }
 
     // ── SessionReport::record ─────────────────────────────────────────────────
