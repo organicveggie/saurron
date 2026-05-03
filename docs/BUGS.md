@@ -22,13 +22,16 @@ container's inspect response and applied when recreating the container.
 
 ### Medium priority
 
-| Field | Impact |
+All five medium-priority items were fixed in `src/update.rs` (`ContainerRunConfig`,
+`extract_run_config`, `build_create_config`).
+
+| Field | Status |
 | --- | --- |
-| `security_opt` | AppArmor and seccomp profiles are dropped. Containers running with a custom security profile will restart without it. |
-| `memory`, `memory_swap`, `memory_reservation`, `nano_cpus`, `cpu_shares`, `cpu_period`, `cpu_quota`, `cpuset_cpus`, `cpuset_mems` | All resource constraints (CPU and memory limits) are lost on update. |
-| `tmpfs` | tmpfs mount definitions are not preserved. |
-| `dns`, `dns_search`, `dns_options` | Custom DNS server and search-domain settings are dropped. |
-| `runtime` | Container runtime override (e.g. `nvidia` for GPU containers) is lost. GPU workloads will fail to start after update. |
+| `security_opt` | **Fixed** — AppArmor and seccomp profiles are now preserved across updates. |
+| `memory`, `memory_swap`, `memory_reservation`, `nano_cpus`, `cpu_shares`, `cpu_period`, `cpu_quota`, `cpuset_cpus`, `cpuset_mems` | **Fixed** — all CPU and memory resource constraints are now preserved. |
+| `tmpfs` | **Fixed** — tmpfs mount definitions are now preserved. |
+| `dns`, `dns_search`, `dns_options` | **Fixed** — custom DNS settings are now preserved. |
+| `runtime` | **Fixed** — container runtime override (e.g. `nvidia`) is now preserved. |
 
 ### Lower priority
 

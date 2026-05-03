@@ -68,6 +68,21 @@ pub struct ContainerRunConfig {
     pub init: Option<bool>,
     pub group_add: Option<Vec<String>>,
     pub mounts: Option<Vec<bollard::models::Mount>>,
+    pub security_opt: Option<Vec<String>>,
+    pub memory: Option<i64>,
+    pub memory_swap: Option<i64>,
+    pub memory_reservation: Option<i64>,
+    pub nano_cpus: Option<i64>,
+    pub cpu_shares: Option<i64>,
+    pub cpu_period: Option<i64>,
+    pub cpu_quota: Option<i64>,
+    pub cpuset_cpus: Option<String>,
+    pub cpuset_mems: Option<String>,
+    pub tmpfs: Option<HashMap<String, String>>,
+    pub dns: Option<Vec<String>>,
+    pub dns_search: Option<Vec<String>>,
+    pub dns_options: Option<Vec<String>>,
+    pub runtime: Option<String>,
     // from ContainerInspectResponse.network_settings.networks
     pub networks: Option<HashMap<String, bollard::models::EndpointSettings>>,
 }
@@ -109,6 +124,21 @@ fn extract_run_config(inspect: &bollard::models::ContainerInspectResponse) -> Co
         init: hc.and_then(|h| h.init),
         group_add: hc.and_then(|h| h.group_add.clone()),
         mounts: hc.and_then(|h| h.mounts.clone()),
+        security_opt: hc.and_then(|h| h.security_opt.clone()),
+        memory: hc.and_then(|h| h.memory),
+        memory_swap: hc.and_then(|h| h.memory_swap),
+        memory_reservation: hc.and_then(|h| h.memory_reservation),
+        nano_cpus: hc.and_then(|h| h.nano_cpus),
+        cpu_shares: hc.and_then(|h| h.cpu_shares),
+        cpu_period: hc.and_then(|h| h.cpu_period),
+        cpu_quota: hc.and_then(|h| h.cpu_quota),
+        cpuset_cpus: hc.and_then(|h| h.cpuset_cpus.clone()),
+        cpuset_mems: hc.and_then(|h| h.cpuset_mems.clone()),
+        tmpfs: hc.and_then(|h| h.tmpfs.clone()),
+        dns: hc.and_then(|h| h.dns.clone()),
+        dns_search: hc.and_then(|h| h.dns_search.clone()),
+        dns_options: hc.and_then(|h| h.dns_options.clone()),
+        runtime: hc.and_then(|h| h.runtime.clone()),
         networks: ns.and_then(|n| n.networks.clone()),
     }
 }
@@ -144,6 +174,21 @@ fn build_create_config(
         init: run_cfg.init,
         group_add: run_cfg.group_add.clone(),
         mounts: run_cfg.mounts.clone(),
+        security_opt: run_cfg.security_opt.clone(),
+        memory: run_cfg.memory,
+        memory_swap: run_cfg.memory_swap,
+        memory_reservation: run_cfg.memory_reservation,
+        nano_cpus: run_cfg.nano_cpus,
+        cpu_shares: run_cfg.cpu_shares,
+        cpu_period: run_cfg.cpu_period,
+        cpu_quota: run_cfg.cpu_quota,
+        cpuset_cpus: run_cfg.cpuset_cpus.clone(),
+        cpuset_mems: run_cfg.cpuset_mems.clone(),
+        tmpfs: run_cfg.tmpfs.clone(),
+        dns: run_cfg.dns.clone(),
+        dns_search: run_cfg.dns_search.clone(),
+        dns_options: run_cfg.dns_options.clone(),
+        runtime: run_cfg.runtime.clone(),
         ..Default::default()
     });
 
@@ -1329,6 +1374,21 @@ mod tests {
             init: None,
             group_add: None,
             mounts: None,
+            security_opt: None,
+            memory: None,
+            memory_swap: None,
+            memory_reservation: None,
+            nano_cpus: None,
+            cpu_shares: None,
+            cpu_period: None,
+            cpu_quota: None,
+            cpuset_cpus: None,
+            cpuset_mems: None,
+            tmpfs: None,
+            dns: None,
+            dns_search: None,
+            dns_options: None,
+            runtime: None,
             healthcheck: None,
             volumes: None,
             networks: None,
@@ -1827,6 +1887,166 @@ mod tests {
         run_cfg.volumes = Some(vec!["/data".to_string()]);
         let cfg = build_create_config(&run_cfg, "img:latest", None);
         assert_eq!(cfg.volumes, Some(vec!["/data".to_string()]));
+    }
+
+    // ── extract_run_config / build_create_config — medium-priority bug fixes ────
+
+    #[test]
+    fn extract_run_config_copies_security_opt() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                security_opt: Some(vec![
+                    "apparmor=my-profile".to_string(),
+                    "seccomp=unconfined".to_string(),
+                ]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(
+            run_cfg.security_opt,
+            Some(vec![
+                "apparmor=my-profile".to_string(),
+                "seccomp=unconfined".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn extract_run_config_copies_resource_limits() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                memory: Some(536_870_912),
+                memory_swap: Some(1_073_741_824),
+                memory_reservation: Some(268_435_456),
+                nano_cpus: Some(500_000_000),
+                cpu_shares: Some(512),
+                cpu_period: Some(100_000),
+                cpu_quota: Some(50_000),
+                cpuset_cpus: Some("0-3".to_string()),
+                cpuset_mems: Some("0".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(run_cfg.memory, Some(536_870_912));
+        assert_eq!(run_cfg.memory_swap, Some(1_073_741_824));
+        assert_eq!(run_cfg.memory_reservation, Some(268_435_456));
+        assert_eq!(run_cfg.nano_cpus, Some(500_000_000));
+        assert_eq!(run_cfg.cpu_shares, Some(512));
+        assert_eq!(run_cfg.cpu_period, Some(100_000));
+        assert_eq!(run_cfg.cpu_quota, Some(50_000));
+        assert_eq!(run_cfg.cpuset_cpus, Some("0-3".to_string()));
+        assert_eq!(run_cfg.cpuset_mems, Some("0".to_string()));
+    }
+
+    #[test]
+    fn extract_run_config_copies_tmpfs() {
+        let mut tmpfs = HashMap::new();
+        tmpfs.insert("/run".to_string(), "size=64m".to_string());
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                tmpfs: Some(tmpfs.clone()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(run_cfg.tmpfs, Some(tmpfs));
+    }
+
+    #[test]
+    fn extract_run_config_copies_dns_settings() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                dns: Some(vec!["1.1.1.1".to_string(), "8.8.8.8".to_string()]),
+                dns_search: Some(vec!["example.com".to_string()]),
+                dns_options: Some(vec!["ndots:2".to_string()]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(
+            run_cfg.dns,
+            Some(vec!["1.1.1.1".to_string(), "8.8.8.8".to_string()])
+        );
+        assert_eq!(run_cfg.dns_search, Some(vec!["example.com".to_string()]));
+        assert_eq!(run_cfg.dns_options, Some(vec!["ndots:2".to_string()]));
+    }
+
+    #[test]
+    fn extract_run_config_copies_runtime() {
+        let inspect = bollard::models::ContainerInspectResponse {
+            host_config: Some(bollard::models::HostConfig {
+                runtime: Some("nvidia".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let run_cfg = extract_run_config(&inspect);
+        assert_eq!(run_cfg.runtime, Some("nvidia".to_string()));
+    }
+
+    #[test]
+    fn build_create_config_copies_security_opt() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.security_opt = Some(vec!["seccomp=unconfined".to_string()]);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        assert_eq!(
+            cfg.host_config.unwrap().security_opt,
+            Some(vec!["seccomp=unconfined".to_string()])
+        );
+    }
+
+    #[test]
+    fn build_create_config_copies_resource_limits() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.memory = Some(536_870_912);
+        run_cfg.nano_cpus = Some(500_000_000);
+        run_cfg.cpu_shares = Some(512);
+        run_cfg.cpu_quota = Some(50_000);
+        run_cfg.cpuset_cpus = Some("0-1".to_string());
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let hc = cfg.host_config.unwrap();
+        assert_eq!(hc.memory, Some(536_870_912));
+        assert_eq!(hc.nano_cpus, Some(500_000_000));
+        assert_eq!(hc.cpu_shares, Some(512));
+        assert_eq!(hc.cpu_quota, Some(50_000));
+        assert_eq!(hc.cpuset_cpus, Some("0-1".to_string()));
+    }
+
+    #[test]
+    fn build_create_config_copies_tmpfs() {
+        let mut run_cfg = default_run_cfg();
+        let mut tmpfs = HashMap::new();
+        tmpfs.insert("/run".to_string(), "size=64m".to_string());
+        run_cfg.tmpfs = Some(tmpfs.clone());
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        assert_eq!(cfg.host_config.unwrap().tmpfs, Some(tmpfs));
+    }
+
+    #[test]
+    fn build_create_config_copies_dns_settings() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.dns = Some(vec!["1.1.1.1".to_string()]);
+        run_cfg.dns_search = Some(vec!["example.com".to_string()]);
+        run_cfg.dns_options = Some(vec!["ndots:2".to_string()]);
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        let hc = cfg.host_config.unwrap();
+        assert_eq!(hc.dns, Some(vec!["1.1.1.1".to_string()]));
+        assert_eq!(hc.dns_search, Some(vec!["example.com".to_string()]));
+        assert_eq!(hc.dns_options, Some(vec!["ndots:2".to_string()]));
+    }
+
+    #[test]
+    fn build_create_config_copies_runtime() {
+        let mut run_cfg = default_run_cfg();
+        run_cfg.runtime = Some("nvidia".to_string());
+        let cfg = build_create_config(&run_cfg, "img:latest", None);
+        assert_eq!(cfg.host_config.unwrap().runtime, Some("nvidia".to_string()));
     }
 
     // ── SessionReport::record ─────────────────────────────────────────────────
