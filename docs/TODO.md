@@ -25,10 +25,16 @@ The `Retry-After` header specifies the number of seconds to wait until you can c
 * Per-registry credential scoping. Separate username/password per registry; Docker config file credential source.
 * Dependent container restarts. Restart containers sharing networks or volumes with updated container.
 * Docker Hub inbound webhook format. Parse Docker Hub-specific webhook payloads.
-* Web UI: Dashboard for update history and manual triggers.
+* Web UI
+    * Dashboard for update history
+    * Manual triggers
+    * Custom template previews with synthetic data
+    * Manually send test notifications
 * Lifecycle hooks. Pre/post-check and pre/post-update shell commands inside containers; EX_TEMPFAIL exit code to signal skip-without-failure
 * Notification template preview. Validate custom templates against synthetic data without real update cycle.
-* Scope-based multi-instance support. Multiple instances on same host managing non-overlapping container sets via scope label
+* Scope-based multi-instance support. Multiple instances on same host managing non-overlapping container sets via scope label.
 * Multiple instance detection. Detect duplicate instances sharing same scope; stop all but most recently created.
 * HTTP API: Update `POST /v1/update` to support embedding the request parameters in the request body with either `application/json` or `application/x-www-form-urlencoded` content types.
 * Docker secrets
+* Timezone — log in specified timezone
+* Log to file?

@@ -11,6 +11,20 @@ pub enum ScheduleMode {
     Cron(Box<cron::Schedule>),
 }
 
+impl ScheduleMode {
+    /// Returns the wall-clock time of the next scheduled run, or `None` for
+    /// `RunOnce` (which runs immediately and does not repeat).
+    pub fn next_run(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        match self {
+            Self::RunOnce => None,
+            Self::Interval(d) => chrono::Duration::from_std(*d)
+                .ok()
+                .map(|delta| chrono::Utc::now() + delta),
+            Self::Cron(s) => s.upcoming(chrono::Utc).next(),
+        }
+    }
+}
+
 pub fn parse_schedule_mode(config: &Config) -> Result<ScheduleMode> {
     if config.run_once {
         if config.poll_interval.is_some() || config.schedule.is_some() {
@@ -47,6 +61,9 @@ where
         }
         ScheduleMode::Interval(duration) => loop {
             run_cycle().await;
+            if let Some(next) = ScheduleMode::Interval(duration).next_run() {
+                tracing::info!(next_run = %next, "next run scheduled");
+            }
             tokio::time::sleep(duration).await;
         },
         ScheduleMode::Cron(schedule) => loop {
@@ -61,6 +78,9 @@ where
                 break;
             }
             run_cycle().await;
+            if let Some(next) = schedule.as_ref().upcoming(chrono::Utc).next() {
+                tracing::info!(next_run = %next, "next run scheduled");
+            }
         },
     }
 }
@@ -126,6 +146,28 @@ mod tests {
     fn invalid_cron_expression_is_error() {
         let cfg = make_config(&["--schedule", "not-a-cron"]);
         assert!(parse_schedule_mode(&cfg).is_err());
+    }
+
+    #[test]
+    fn next_run_run_once_is_none() {
+        assert!(ScheduleMode::RunOnce.next_run().is_none());
+    }
+
+    #[test]
+    fn next_run_interval_is_future() {
+        let d = Duration::from_secs(3_600);
+        let before = chrono::Utc::now();
+        let next = ScheduleMode::Interval(d).next_run().unwrap();
+        assert!(next > before);
+        assert!(next <= before + chrono::Duration::hours(2));
+    }
+
+    #[test]
+    fn next_run_cron_is_future() {
+        let schedule = cron::Schedule::from_str("0 * * * * *").unwrap();
+        let before = chrono::Utc::now();
+        let next = ScheduleMode::Cron(Box::new(schedule)).next_run().unwrap();
+        assert!(next > before);
     }
 
     #[test]
