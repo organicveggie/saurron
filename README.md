@@ -88,6 +88,7 @@ docker run -d \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /etc/saurron/config.toml:/etc/saurron/config.toml:ro \
   --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+  -e TZ=America/New_York \
   ghcr.io/organicveggie/saurron:latest
 
 # Single update cycle
@@ -97,11 +98,11 @@ docker run --rm \
   ghcr.io/organicveggie/saurron:latest --run-once
 ```
 
-> The container runs as UID 1000 (non-root). The `--group-add` flag grants access
-> to the Docker socket by joining the socket's group on the host.
->
-> Published images are multi-platform (`linux/amd64`, `linux/arm64`). Available
-> tags: `latest`, `edge` (latest `main`), and semver pins (`v1`, `v1.2`, `v1.2.3`).
+The container runs as UID 1000 (non-root). The `--group-add` flag grants access
+to the Docker socket by joining the socket's group on the host.
+
+Published images are multi-platform (`linux/amd64`, `linux/arm64`). Available
+tags: `latest`, `edge` (latest `main`), and semver pins (`v1`, `v1.2`, `v1.2.3`).
 
 ## Run from binary
 

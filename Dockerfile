@@ -13,7 +13,7 @@ RUN cargo build --profile release --locked
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get install -y --no-install-recommends ca-certificates tzdata \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root user. GID 0 lets the container access a Docker socket mounted
@@ -29,6 +29,8 @@ LABEL org.opencontainers.image.title="Saurron" \
       org.opencontainers.image.version="${SAURRON_BUILD_VERSION}" \
       org.opencontainers.image.licenses="GPL-3.0-or-later" \
       org.opencontainers.image.source="https://github.com/organicveggie/saurron"
+
+ENV TZ=UTC
 
 USER saurron
 
