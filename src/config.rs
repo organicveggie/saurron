@@ -791,18 +791,6 @@ run_once = false
 #   never  — always log at debug level
 head_warn_strategy = "auto"
 
-[docker]
-# Docker daemon socket or TCP address
-host = "unix:///var/run/docker.sock"
-# Verify TLS certificates for TCP connections
-tls_verify = false
-# TLS certificate paths (required when tls_verify = true)
-# tls_ca_cert = ""
-# tls_cert = ""
-# tls_key = ""
-# Override the negotiated Docker API version, e.g. "1.44"
-# api_version = ""
-
 # ── Container selection ─────────────────────────────────────────────────────
 
 # Opt-in mode: only update containers with the saurron.enable=true label.
@@ -836,6 +824,18 @@ cleanup = false
 
 # How long to wait for a container to stop gracefully before sending SIGKILL.
 stop_timeout = "10s"
+
+[docker]
+# Docker daemon socket or TCP address
+host = "unix:///var/run/docker.sock"
+# Verify TLS certificates for TCP connections
+tls_verify = false
+# TLS certificate paths (required when tls_verify = true)
+# tls_ca_cert = ""
+# tls_cert = ""
+# tls_key = ""
+# Override the negotiated Docker API version, e.g. "1.44"
+# api_version = ""
 
 [rollback]
 # Roll back if the new container exits with a non-zero code.
@@ -1191,6 +1191,26 @@ mod tests {
         assert!(cfg.notifications.email.is_none());
         assert!(cfg.notifications.mqtt.is_none());
         assert!(cfg.notifications.pushover.is_none());
+    }
+
+    #[test]
+    fn generate_sample_config_root_fields_survive_round_trip() {
+        // Verify that container-selection and update-behaviour fields are at the
+        // TOML root level, not accidentally nested inside [docker]. Replace
+        // default values with non-defaults so a silent discard would fail the
+        // assertions.
+        let output = generate_sample_config()
+            .replace("containers = []", "containers = [\"web\", \"db\"]")
+            .replace("monitor_only = false", "monitor_only = true")
+            .replace("label_enable = false", "label_enable = true");
+        let path = std::env::temp_dir().join("saurron_sample_config_root_fields_test.toml");
+        std::fs::write(&path, &output).unwrap();
+        let cfg = load_cfg(&["--config", path.to_str().unwrap()]);
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(cfg.containers, vec!["web", "db"]);
+        assert!(cfg.monitor_only);
+        assert!(cfg.label_enable);
     }
 
     #[test]
