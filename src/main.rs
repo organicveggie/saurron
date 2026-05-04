@@ -131,6 +131,27 @@ async fn main() -> anyhow::Result<()> {
     // Validate scheduling flags (clap catches CLI conflicts; this catches TOML combinations).
     let schedule_mode = scheduler::parse_schedule_mode(&config)?;
 
+    match &schedule_mode {
+        scheduler::ScheduleMode::RunOnce => {
+            info!(mode = "run-once", "schedule configured");
+        }
+        scheduler::ScheduleMode::Interval(_) => {
+            let interval = config.poll_interval.as_deref().unwrap_or("24h");
+            info!(
+                mode = "interval",
+                interval,
+                first_run = "immediate",
+                "schedule configured"
+            );
+        }
+        scheduler::ScheduleMode::Cron(_) => {
+            let expression = config.schedule.as_deref().unwrap_or("");
+            if let Some(next) = schedule_mode.next_run() {
+                info!(mode = "cron", expression, next_run = %next, "schedule configured");
+            }
+        }
+    }
+
     let docker = docker::DockerClient::connect(&config.docker)?;
     docker.ping().await?;
     info!("Connected to Docker daemon");
