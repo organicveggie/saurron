@@ -23,6 +23,7 @@ docker pull ghcr.io/organicveggie/saurron:latest
 docker run -d --name saurron --restart=always \
     -v /var/run/docker.sock:/var/run/docker.sock \
     -e SAURRON_POLL_INTERVAL=24h \
+    -e TZ=America/New_York
     ghcr.io/organicveggie/saurron:latest
 ```
 
@@ -40,6 +41,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - 8080:8080
+    environment:
+      TZ: Australia/Sydney
 
 networks:
   default:
