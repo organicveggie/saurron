@@ -548,20 +548,44 @@ fn format_image_ref(image_ref: &ImageRef, tag: &str) -> String {
 /// Parse an image reference string into its components.
 ///
 /// Handles the following forms:
-/// - `nginx`                            → Docker Hub official, tag `latest`
-/// - `nginx:1.25.3`                     → Docker Hub official, explicit tag
-/// - `myorg/myapp:1.0.0`               → Docker Hub namespaced
-/// - `ghcr.io/myorg/myapp:latest`      → custom registry
-/// - `registry.example.com:5000/app`   → registry with port
-/// - `myapp@sha256:abc123`             → digest-pinned (always skipped)
+/// - `nginx`                                   → Docker Hub official, tag `latest`
+/// - `nginx:1.25.3`                            → Docker Hub official, explicit tag
+/// - `myorg/myapp:1.0.0`                      → Docker Hub namespaced
+/// - `ghcr.io/myorg/myapp:latest`             → custom registry
+/// - `registry.example.com:5000/app`          → registry with port
+/// - `myapp:1.0@sha256:abc123`                → tag+digest pin; checks tag freshness
+/// - `myapp@sha256:abc123`                    → digest-only pin (no tag); always skipped
+/// - `sha256:abc123`                          → bare image ID (no tag); always skipped
 pub fn parse_image_ref(image: &str) -> Result<ImageRef, RegistryError> {
-    // Split off digest.
+    // A bare image ID ("sha256:hexhash") has no registry, repository, or tag.
+    // Return as a Digest reference so check_freshness skips it cleanly instead
+    // of misinterpreting "sha256" as a Docker Hub repository name.
+    if !image.contains('/') && image.starts_with("sha256:") {
+        return Ok(ImageRef {
+            registry: String::new(),
+            repository: String::new(),
+            reference: ImageReference::Digest(image.to_string()),
+        });
+    }
+
     let (name_part, reference) = if let Some(at_pos) = image.find('@') {
-        let name = &image[..at_pos];
+        let before_at = &image[..at_pos];
         let digest = image[at_pos + 1..].to_string();
-        (name, ImageReference::Digest(digest))
+        // If a tag is present before the @, strip it from the name and use it
+        // as the reference for freshness checking. This lets `image:tag@sha256:digest`
+        // references be checked for updates rather than silently skipped.
+        let last_slash_end = before_at.rfind('/').map(|p| p + 1).unwrap_or(0);
+        if let Some(rel_colon) = before_at[last_slash_end..].find(':') {
+            let colon_pos = last_slash_end + rel_colon;
+            (
+                &before_at[..colon_pos],
+                ImageReference::Tag(before_at[colon_pos + 1..].to_string()),
+            )
+        } else {
+            (before_at, ImageReference::Digest(digest))
+        }
     } else {
-        // Find tag: last ':' in the path after the last '/'.
+        // Find tag: last ':' in the path component after the last '/'.
         let last_slash_end = image.rfind('/').map(|p| p + 1).unwrap_or(0);
         if let Some(rel_colon) = image[last_slash_end..].find(':') {
             let colon_pos = last_slash_end + rel_colon;
@@ -702,11 +726,35 @@ mod tests {
     }
 
     #[test]
-    fn parse_digest_with_tag_ignored() {
+    fn parse_tag_and_digest_uses_tag() {
         let r = parse_image_ref("nginx:latest@sha256:abc123").unwrap();
+        assert_eq!(r.registry, "registry-1.docker.io");
+        assert_eq!(r.repository, "library/nginx");
+        assert_eq!(r.reference, ImageReference::Tag("latest".to_string()));
+    }
+
+    #[test]
+    fn parse_tag_and_digest_custom_registry() {
+        let r = parse_image_ref("lscr.io/linuxserver/sonarr:latest@sha256:abc123def456").unwrap();
+        assert_eq!(r.registry, "lscr.io");
+        assert_eq!(r.repository, "linuxserver/sonarr");
+        assert_eq!(r.reference, ImageReference::Tag("latest".to_string()));
+    }
+
+    #[test]
+    fn parse_bare_sha256_digest() {
+        let r = parse_image_ref(
+            "sha256:ddf896fd2d36a9798a6dd9b9c404c34a99f54aff1881f80292aba7c4247a914c",
+        )
+        .unwrap();
+        assert_eq!(r.registry, "");
+        assert_eq!(r.repository, "");
         assert_eq!(
             r.reference,
-            ImageReference::Digest("sha256:abc123".to_string())
+            ImageReference::Digest(
+                "sha256:ddf896fd2d36a9798a6dd9b9c404c34a99f54aff1881f80292aba7c4247a914c"
+                    .to_string()
+            )
         );
     }
 
