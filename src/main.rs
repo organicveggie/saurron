@@ -9,7 +9,7 @@ const VERSION: &str = env!("SAURRON_VERSION");
 
 fn init_tracing(
     config: &config::Config,
-) -> anyhow::Result<Option<tracing_appender::non_blocking::WorkerGuard>> {
+) -> anyhow::Result<Vec<tracing_appender::non_blocking::WorkerGuard>> {
     use std::io::IsTerminal;
     use tracing_subscriber::{Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -41,8 +41,10 @@ fn init_tracing(
         cli::LogFormat::Auto => unreachable!(),
     };
 
-    let mut guard: Option<tracing_appender::non_blocking::WorkerGuard> = None;
-    let audit_layer: Option<BoxLayer> = if let Some(ref path) = config.audit_log {
+    let mut guards: Vec<tracing_appender::non_blocking::WorkerGuard> = Vec::new();
+    let mut layers: Vec<BoxLayer> = vec![stdout_layer];
+
+    if let Some(ref path) = config.audit_log {
         let p = std::path::Path::new(path);
         let dir = p.parent().unwrap_or_else(|| std::path::Path::new("."));
         let filename = p
@@ -54,22 +56,40 @@ fn init_tracing(
             .with_context(|| format!("failed to create audit log directory: {}", dir.display()))?;
         let appender = tracing_appender::rolling::never(dir, &filename);
         let (non_blocking, g) = tracing_appender::non_blocking(appender);
-        guard = Some(g);
-        let layer = tracing_subscriber::fmt::layer()
-            .json()
-            .with_writer(non_blocking)
-            .with_filter(tracing_subscriber::filter::filter_fn(|meta| {
-                meta.target() == "saurron::audit"
-            }))
-            .boxed();
-        Some(layer)
-    } else {
-        None
-    };
+        guards.push(g);
+        layers.push(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_writer(non_blocking)
+                .with_filter(tracing_subscriber::filter::filter_fn(|meta| {
+                    meta.target() == "saurron::audit"
+                }))
+                .boxed(),
+        );
+    }
 
-    let mut layers: Vec<BoxLayer> = vec![stdout_layer];
-    if let Some(layer) = audit_layer {
-        layers.push(layer);
+    if let Some(ref path) = config.http_api.access_log {
+        let p = std::path::Path::new(path);
+        let dir = p.parent().unwrap_or_else(|| std::path::Path::new("."));
+        let filename = p
+            .file_name()
+            .context("http_api.access_log path must include a filename")?
+            .to_string_lossy()
+            .into_owned();
+        std::fs::create_dir_all(dir)
+            .with_context(|| format!("failed to create access log directory: {}", dir.display()))?;
+        let appender = tracing_appender::rolling::never(dir, &filename);
+        let (non_blocking, g) = tracing_appender::non_blocking(appender);
+        guards.push(g);
+        layers.push(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_writer(non_blocking)
+                .with_filter(tracing_subscriber::filter::filter_fn(|meta| {
+                    meta.target() == "saurron::access"
+                }))
+                .boxed(),
+        );
     }
 
     tracing_subscriber::registry()
@@ -77,7 +97,7 @@ fn init_tracing(
         .with(tracing_subscriber::EnvFilter::from_default_env().add_directive(level.into()))
         .init();
 
-    Ok(guard)
+    Ok(guards)
 }
 
 async fn shutdown_signal() {
@@ -116,7 +136,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let (config, config_status) = config::Config::load(&args)?;
-    let _guard = init_tracing(&config)?;
+    let _guards = init_tracing(&config)?;
 
     info!(version = VERSION, "Saurron starting");
     config_status.log();
@@ -124,6 +144,13 @@ async fn main() -> anyhow::Result<()> {
         return Err(anyhow::anyhow!("failed to load config file"));
     }
     config.log_settings();
+
+    if config.http_api.access_log.is_some() && !config.http_api.update && !config.http_api.metrics {
+        tracing::warn!(
+            "http_api.access_log is configured but the HTTP API is not enabled; \
+             access log will not be written"
+        );
+    }
 
     // Validate HTTP API token config before binding any ports.
     http::validate_token_config(&config.http_api)?;

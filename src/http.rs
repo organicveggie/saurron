@@ -1,8 +1,10 @@
+use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Instant;
 
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{ConnectInfo, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -142,6 +144,63 @@ async fn get_metrics(State(state): State<AppState>, headers: HeaderMap) -> Respo
         .into_response()
 }
 
+fn redact_authorization(value: &str) -> String {
+    let mut parts = value.splitn(2, ' ');
+    match (parts.next(), parts.next()) {
+        (Some(scheme), Some(_)) => format!("{scheme} [REDACTED]"),
+        _ => "[REDACTED]".to_string(),
+    }
+}
+
+async fn access_log_middleware(
+    ConnectInfo(remote_addr): ConnectInfo<SocketAddr>,
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let start = Instant::now();
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let version = request.version();
+    let host = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("<not set>")
+        .to_string();
+    let user_agent = request
+        .headers()
+        .get(header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("<not set>")
+        .to_string();
+    let authorization = request
+        .headers()
+        .get(header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .map(redact_authorization)
+        .unwrap_or_else(|| "<not set>".to_string());
+
+    let response = next.run(request).await;
+
+    tracing::info!(
+        target: "saurron::access",
+        remote_addr = %remote_addr,
+        host        = %host,
+        uri         = %uri,
+        path        = uri.path(),
+        method      = %method,
+        protocol    = ?version,
+        scheme      = uri.scheme_str().unwrap_or("http"),
+        user_agent  = %user_agent,
+        authorization = %authorization,
+        status      = response.status().as_u16(),
+        duration_ms = start.elapsed().as_millis() as u64,
+        "",
+    );
+
+    response
+}
+
 pub async fn start_server(state: AppState) -> anyhow::Result<()> {
     use anyhow::Context as _;
 
@@ -153,6 +212,11 @@ pub async fn start_server(state: AppState) -> anyhow::Result<()> {
         router = router.route("/v1/metrics", get(get_metrics));
     }
     let router = router.with_state(state.clone());
+    let router = if state.config.http_api.access_log.is_some() {
+        router.layer(axum::middleware::from_fn(access_log_middleware))
+    } else {
+        router
+    };
 
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], state.config.http_api.port));
     let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| {
@@ -165,9 +229,12 @@ pub async fn start_server(state: AppState) -> anyhow::Result<()> {
         port = state.config.http_api.port,
         "HTTP API server listening"
     );
-    axum::serve(listener, router)
-        .await
-        .context("HTTP API server error")
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .context("HTTP API server error")
 }
 
 #[cfg(test)]
@@ -186,6 +253,7 @@ mod tests {
             token: token.map(|s| s.to_string()),
             port: 8080,
             metrics_no_auth,
+            access_log: None,
         }
     }
 
@@ -244,5 +312,23 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert(header::AUTHORIZATION, "Basic dXNlcjpwYXNz".parse().unwrap());
         assert!(!check_auth(&headers, "dXNlcjpwYXNz"));
+    }
+
+    #[test]
+    fn redact_authorization_bearer() {
+        assert_eq!(redact_authorization("Bearer mytoken"), "Bearer [REDACTED]");
+    }
+
+    #[test]
+    fn redact_authorization_basic() {
+        assert_eq!(
+            redact_authorization("Basic dXNlcjpwYXNz"),
+            "Basic [REDACTED]"
+        );
+    }
+
+    #[test]
+    fn redact_authorization_bare_value() {
+        assert_eq!(redact_authorization("notype"), "[REDACTED]");
     }
 }

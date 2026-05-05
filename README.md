@@ -28,8 +28,8 @@ Inspired by [Watchtower](https://github.com/containrrr/watchtower).
     Per-container overrides. Configurable `--head-warn-strategy` for failed manifest HEAD requests.
 - **Graceful shutdown** - `SIGTERM`/`SIGINT` wait for in-progress update cycle to complete before
     exiting.
-- **HTTP API** - Update specific images or containres. Health check. Metrics. Bearer token auth.
-    Concurrent-request locking.
+- **HTTP API** - Update specific images or containers. Health check. Metrics. Bearer token auth.
+    Concurrent-request locking. Structured JSON access log per request.
 - **Layered configuration** - TOML file, environment variables, and CLI flags.
 - **Notifications** - Batched per-cycle reports dispatched to all configured targets concurrently.
     Trgets include: webhook (HTTP POST, custom headers, optional TLS skip-verify), email

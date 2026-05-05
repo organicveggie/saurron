@@ -58,6 +58,7 @@ pub struct HttpApiConfig {
     pub token: Option<String>,
     pub port: u16,
     pub metrics_no_auth: bool,
+    pub access_log: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -226,6 +227,7 @@ struct PartialHttpApiConfig {
     token: Option<String>,
     port: Option<u16>,
     metrics_no_auth: Option<bool>,
+    access_log: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -570,6 +572,7 @@ impl Config {
                     .http_api_metrics_no_auth
                     .or(ph.metrics_no_auth)
                     .unwrap_or(false),
+                access_log: args.http_api_access_log.clone().or(ph.access_log),
             },
             notifications: NotificationsConfig {
                 general: GeneralNotifConfig {
@@ -692,6 +695,7 @@ impl Config {
             port = self.http_api.port,
             metrics_no_auth = self.http_api.metrics_no_auth,
             token = redact_opt(&self.http_api.token),
+            access_log = self.http_api.access_log.as_deref().unwrap_or("<not set>"),
             "config: http_api"
         );
         info!(
@@ -858,6 +862,8 @@ metrics = false
 port = 8080
 # Allow unauthenticated access to GET /v1/metrics.
 metrics_no_auth = false
+# Path to HTTP API access log file (JSON, one line per request; optional).
+# access_log = "/var/log/saurron/access.log"
 
 [notifications]
 # Delay between cycle completion and notification dispatch, e.g. "0s", "30s".
@@ -1251,6 +1257,22 @@ mod tests {
         assert_eq!(mqtt.client_id, Some("client-1".to_string()));
         assert_eq!(mqtt.username, Some("mqttuser".to_string()));
         assert_eq!(mqtt.password, Some("mqttpass".to_string()));
+    }
+
+    #[test]
+    fn http_api_access_log_round_trips_from_toml() {
+        let path = std::env::temp_dir().join("saurron_test_access_log_config.toml");
+        std::fs::write(
+            &path,
+            "[http_api]\naccess_log = \"/var/log/saurron/access.log\"",
+        )
+        .unwrap();
+        let cfg = load_cfg(&["--config", path.to_str().unwrap()]);
+        std::fs::remove_file(&path).ok();
+        assert_eq!(
+            cfg.http_api.access_log,
+            Some("/var/log/saurron/access.log".to_string())
+        );
     }
 
     #[test]

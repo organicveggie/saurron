@@ -276,6 +276,10 @@ pub struct Args {
     )]
     pub http_api_metrics_no_auth: Option<bool>,
 
+    /// Path to HTTP API access log file (JSON, one line per request)
+    #[arg(long, env = "SAURRON_HTTP_API_ACCESS_LOG", value_name = "PATH")]
+    pub http_api_access_log: Option<String>,
+
     // === Notifications — General ===
     /// Delay between cycle completion and notification dispatch (e.g. 30s)
     #[arg(long, env = "SAURRON_NOTIFICATION_DELAY", value_name = "DURATION")]

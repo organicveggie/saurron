@@ -36,5 +36,7 @@ The `Retry-After` header specifies the number of seconds to wait until you can c
 * Multiple instance detection. Detect duplicate instances sharing same scope; stop all but most recently created.
 * HTTP API: Update `POST /v1/update` to support embedding the request parameters in the request body with either `application/json` or `application/x-www-form-urlencoded` content types.
 * Docker secrets
-* Timezone — log in specified timezone
 * Log to file?
+* Third-party authorization / authentication
+* Stdout logging - target exclusion filter
+  * Exclude audit logging, access logging, etc.
