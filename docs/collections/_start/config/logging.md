@@ -124,6 +124,14 @@ Optional path to an append-only audit log file. Written in newline-delimited str
 }
 ```
 
+## HTTP access log
+
+See [HTTP API — Access log](http-api.md#access-log) for configuration details.
+
+The HTTP API access log is configured under the `[http_api]` TOML section and records one
+structured JSON entry per incoming request, including timing, remote address, method, path,
+protocol, User-Agent, and a redacted Authorization header.
+
 ## Shorthand
 
 --debug
