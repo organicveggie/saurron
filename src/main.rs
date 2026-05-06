@@ -7,6 +7,20 @@ use tracing::info;
 
 const VERSION: &str = env!("SAURRON_VERSION");
 
+/// `tracing-subscriber` defaults to UTC timestamps regardless of the `TZ` environment variable.
+/// This timer uses `chrono::Local` so the configured timezone is reflected in all log output.
+struct LocalTime;
+
+impl tracing_subscriber::fmt::time::FormatTime for LocalTime {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+        write!(
+            w,
+            "{}",
+            chrono::Local::now().to_rfc3339_opts(chrono::SecondsFormat::Nanos, false)
+        )
+    }
+}
+
 fn init_tracing(
     config: &config::Config,
 ) -> anyhow::Result<Vec<tracing_appender::non_blocking::WorkerGuard>> {
@@ -35,8 +49,15 @@ fn init_tracing(
     type BoxLayer = Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>;
 
     let stdout_layer: BoxLayer = match effective_format {
-        cli::LogFormat::Json => tracing_subscriber::fmt::layer().json().boxed(),
-        cli::LogFormat::Pretty => tracing_subscriber::fmt::layer().pretty().boxed(),
+        cli::LogFormat::Json => tracing_subscriber::fmt::layer()
+            .with_timer(LocalTime)
+            .json()
+            .boxed(),
+        cli::LogFormat::Pretty => tracing_subscriber::fmt::layer()
+            .with_timer(LocalTime)
+            .pretty()
+            .boxed(),
+        // tracing_logfmt hardcodes UTC and does not support a custom timer.
         cli::LogFormat::Logfmt => tracing_logfmt::layer().boxed(),
         cli::LogFormat::Auto => unreachable!(),
     };
@@ -59,6 +80,7 @@ fn init_tracing(
         guards.push(g);
         layers.push(
             tracing_subscriber::fmt::layer()
+                .with_timer(LocalTime)
                 .json()
                 .with_writer(non_blocking)
                 .with_filter(tracing_subscriber::filter::filter_fn(|meta| {
@@ -83,6 +105,7 @@ fn init_tracing(
         guards.push(g);
         layers.push(
             tracing_subscriber::fmt::layer()
+                .with_timer(LocalTime)
                 .json()
                 .with_writer(non_blocking)
                 .with_filter(tracing_subscriber::filter::filter_fn(|meta| {
