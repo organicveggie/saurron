@@ -749,22 +749,21 @@ impl<'a> UpdateEngine<'a> {
         // (e.g. by another tool, or left behind after a rollback) without restarting
         // the container, the local digest matches the registry but the container is
         // still running the old image. Detect this by comparing image IDs.
-        if matches!(freshness, registry::FreshnessResult::UpToDate) {
-            if let Some(ref local_id) = image_info.id {
-                if local_image_is_newer(&container.image_id, local_id) {
-                    info!(
-                        container = %container.name,
-                        running_image_id = %container.image_id,
-                        local_image_id = %local_id,
-                        "container is running an outdated local image; treating as stale"
-                    );
-                    return registry::FreshnessResult::Stale(registry::StaleInfo {
-                        current_digest: container.image_id.clone(),
-                        new_image: image_for_check.to_string(),
-                        new_digest: image_info.digest.clone().unwrap_or_default(),
-                    });
-                }
-            }
+        if matches!(freshness, registry::FreshnessResult::UpToDate)
+            && let Some(ref local_id) = image_info.id
+            && local_image_is_newer(&container.image_id, local_id)
+        {
+            info!(
+                container = %container.name,
+                running_image_id = %container.image_id,
+                local_image_id = %local_id,
+                "container is running an outdated local image; treating as stale"
+            );
+            return registry::FreshnessResult::Stale(registry::StaleInfo {
+                current_digest: container.image_id.clone(),
+                new_image: image_for_check.to_string(),
+                new_digest: image_info.digest.clone().unwrap_or_default(),
+            });
         }
 
         freshness
