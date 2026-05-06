@@ -71,8 +71,8 @@ pub async fn run_cycle_with_state(state: &AppStateInner) {
     notifications::dispatch(&state.config.notifications, &report).await;
 }
 
-async fn health() -> StatusCode {
-    StatusCode::OK
+async fn health() -> impl IntoResponse {
+    (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
 }
 
 async fn post_update(

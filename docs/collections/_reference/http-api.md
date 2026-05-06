@@ -32,7 +32,7 @@ token required.
 
 ```shell
 $ curl http://localhost:8080/v1/health
-OK
+{"status":"ok"}
 ```
 
 ## GET `/v1/metrics`
