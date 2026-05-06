@@ -40,7 +40,7 @@ fn init_tracing(
             if std::io::stdout().is_terminal() {
                 cli::LogFormat::Pretty
             } else {
-                cli::LogFormat::Logfmt
+                cli::LogFormat::Json
             }
         }
         f => f,

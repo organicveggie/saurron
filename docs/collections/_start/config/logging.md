@@ -45,7 +45,7 @@ TOML key
 Format for logging output. Possible values include:
 
 `auto`
-: Uses the `pretty` format when standard out is a terminal/tty. Otherwise uses the `logfmt` format.
+: Uses the `pretty` format when standard out is a terminal/tty. Otherwise uses the `json` format.
 
 `json`
 : Newline-delimited structured JSON logs. The JSON output is not optimized for human readability.

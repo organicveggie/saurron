@@ -768,7 +768,7 @@ pub fn generate_sample_config() -> String {
 # Log verbosity: trace, debug, info, warn, error
 log_level = "info"
 
-# Log format: auto (detects TTY → pretty, pipe → logfmt), json, logfmt, pretty
+# Log format: auto (detects TTY → pretty, pipe → json), json, logfmt, pretty
 log_format = "auto"
 
 # Append-only JSON audit log (optional; omit to disable)
