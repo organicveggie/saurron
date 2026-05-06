@@ -31,6 +31,14 @@ TOML key
 
 Log verbosity level. Possible values include: `trace`, `debug`, `info`, `warn`, and `error`. Default: `info`.
 
+### Shorthand
+
+`--debug`
+: Shorthand for `--log-level debug`
+
+`--trace`
+: Shorthand for `--log-level trace`
+
 ## Log format
 
 CLI flag
@@ -126,16 +134,16 @@ Optional path to an append-only audit log file. Written in newline-delimited str
 
 ## HTTP access log
 
-See [HTTP API — Access log](http-api.md#access-log) for configuration details.
+CLI flag
+: `--http-api-access-log <path>`
+
+Environment
+: `SAURRON_HTTP_API_ACCESS_LOG`
+
+TOML key
+: `http_api.access_log`
 
 The HTTP API access log is configured under the `[http_api]` TOML section and records one
-structured JSON entry per incoming request, including timing, remote address, method, path,
-protocol, User-Agent, and a redacted Authorization header.
+structured JSON entry per incoming request.
 
-## Shorthand
-
---debug
-: Shorthand for `--log-level debug`
-
-—trace
-: Shorthand for `--log-level trace`
+See [HTTP API — Access log]({% link start/config/http-api.md %}#access-log) for configuration details.
