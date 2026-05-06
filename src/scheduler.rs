@@ -14,13 +14,13 @@ pub enum ScheduleMode {
 impl ScheduleMode {
     /// Returns the wall-clock time of the next scheduled run, or `None` for
     /// `RunOnce` (which runs immediately and does not repeat).
-    pub fn next_run(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+    pub fn next_run(&self) -> Option<chrono::DateTime<chrono::Local>> {
         match self {
             Self::RunOnce => None,
             Self::Interval(d) => chrono::Duration::from_std(*d)
                 .ok()
-                .map(|delta| chrono::Utc::now() + delta),
-            Self::Cron(s) => s.upcoming(chrono::Utc).next(),
+                .map(|delta| chrono::Local::now() + delta),
+            Self::Cron(s) => s.upcoming(chrono::Local).next(),
         }
     }
 }
