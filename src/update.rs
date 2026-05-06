@@ -541,6 +541,12 @@ fn resolve_bool_override(global: bool, global_takes_precedence: bool, label: Opt
 
 // ── UpdateEngine ──────────────────────────────────────────────────────────────
 
+/// True when the running container was started from an older version of the
+/// local image — the tag was re-pulled without the container being restarted.
+fn local_image_is_newer(running_image_id: &str, local_image_id: &str) -> bool {
+    !running_image_id.is_empty() && !local_image_id.is_empty() && running_image_id != local_image_id
+}
+
 pub struct UpdateEngine<'a> {
     docker: &'a docker::DockerClient,
     registry: &'a registry::RegistryClient,
@@ -728,14 +734,39 @@ impl<'a> UpdateEngine<'a> {
             .map(registry::parse_non_semver_strategy)
             .unwrap_or_default();
 
-        self.registry
+        let freshness = self
+            .registry
             .check_freshness(
                 image_for_check,
                 image_info.digest.as_deref(),
                 allow_pre,
                 strategy,
             )
-            .await
+            .await;
+
+        // The registry comparison above uses the local image's manifest digest, not
+        // the running container's image ID. If the local image tag was re-pulled
+        // (e.g. by another tool, or left behind after a rollback) without restarting
+        // the container, the local digest matches the registry but the container is
+        // still running the old image. Detect this by comparing image IDs.
+        if matches!(freshness, registry::FreshnessResult::UpToDate)
+            && let Some(ref local_id) = image_info.id
+            && local_image_is_newer(&container.image_id, local_id)
+        {
+            info!(
+                container = %container.name,
+                running_image_id = %container.image_id,
+                local_image_id = %local_id,
+                "container is running an outdated local image; treating as stale"
+            );
+            return registry::FreshnessResult::Stale(registry::StaleInfo {
+                current_digest: container.image_id.clone(),
+                new_image: image_for_check.to_string(),
+                new_digest: image_info.digest.clone().unwrap_or_default(),
+            });
+        }
+
+        freshness
     }
 
     async fn update_one(
@@ -2311,5 +2342,27 @@ mod tests {
         );
         let graph = build_dependency_graph(&containers, &inspect_map);
         assert!(graph["app"].is_empty());
+    }
+
+    // ── local_image_is_newer ──────────────────────────────────────────────────
+
+    #[test]
+    fn local_image_newer_when_ids_differ() {
+        assert!(local_image_is_newer("sha256:old", "sha256:new"));
+    }
+
+    #[test]
+    fn local_image_not_newer_when_ids_match() {
+        assert!(!local_image_is_newer("sha256:abc", "sha256:abc"));
+    }
+
+    #[test]
+    fn local_image_not_newer_when_running_id_empty() {
+        assert!(!local_image_is_newer("", "sha256:new"));
+    }
+
+    #[test]
+    fn local_image_not_newer_when_local_id_empty() {
+        assert!(!local_image_is_newer("sha256:old", ""));
     }
 }

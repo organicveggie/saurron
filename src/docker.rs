@@ -289,6 +289,10 @@ pub struct LocalImageInfo {
     /// Manifest digest from first `RepoDigests` entry (part after `@`),
     /// e.g. `"sha256:6eed15406dbba206cb1260528a3354d80d2522cab068cb9ad7a1ede5ac90e6f6"`.
     pub digest: Option<String>,
+    /// Content-hash image ID (`ImageInspect.id`), e.g. `"sha256:abc..."`.
+    /// Used to detect when a container is running an older version of an image
+    /// that has been re-pulled locally without the container being restarted.
+    pub id: Option<String>,
 }
 
 fn local_image_info_from_inspect(inspect: &bollard::models::ImageInspect) -> LocalImageInfo {
@@ -302,7 +306,11 @@ fn local_image_info_from_inspect(inspect: &bollard::models::ImageInspect) -> Loc
         .as_deref()
         .and_then(|digests| digests.first())
         .and_then(|rd| rd.split_once('@').map(|(_, d)| d.to_string()));
-    LocalImageInfo { name, digest }
+    LocalImageInfo {
+        name,
+        digest,
+        id: inspect.id.clone(),
+    }
 }
 
 // ── Bollard summary → ContainerInfo ──────────────────────────────────────────
@@ -959,6 +967,21 @@ mod tests {
         );
         let info = local_image_info_from_inspect(&inspect);
         assert_eq!(info.digest, Some("sha256:deadbeef".to_string()));
+    }
+
+    #[test]
+    fn image_info_id_from_inspect() {
+        let mut inspect = make_inspect(Some(vec!["nginx:latest"]), None);
+        inspect.id = Some("sha256:cafebabe".to_string());
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.id, Some("sha256:cafebabe".to_string()));
+    }
+
+    #[test]
+    fn image_info_id_none_when_absent() {
+        let inspect = make_inspect(Some(vec!["nginx:latest"]), None);
+        let info = local_image_info_from_inspect(&inspect);
+        assert_eq!(info.id, None);
     }
 
     // ── summary_to_info ───────────────────────────────────────────────────────
