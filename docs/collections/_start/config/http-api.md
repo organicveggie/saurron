@@ -98,7 +98,7 @@ TOML key
 Serve `GET /v1/metrics` without requiring a Bearer token. Useful when Prometheus scrapes from a
 trusted network and does not support bearer token authentication. Default: `false`.
 
-## Access log
+## Access log {: #access-log}
 
 CLI flag
 : `--http-api-access-log <path>`
