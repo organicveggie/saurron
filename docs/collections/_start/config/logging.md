@@ -146,4 +146,4 @@ TOML key
 The HTTP API access log is configured under the `[http_api]` TOML section and records one
 structured JSON entry per incoming request.
 
-See [HTTP API — Access log]({% link start/config/http-api.md %}#access-log) for configuration details.
+See [HTTP API — Access log]({% link _start/config/http-api.md %}#access-log) for configuration details.
