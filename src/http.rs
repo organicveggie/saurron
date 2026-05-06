@@ -113,6 +113,9 @@ async fn post_update(
         .run_cycle(&selected)
         .await;
 
+    metrics::record_cycle(&report);
+    notifications::dispatch(&state.config.notifications, &report).await;
+
     Json(report).into_response()
 }
 
@@ -201,9 +204,10 @@ async fn access_log_middleware(
     response
 }
 
-pub async fn start_server(state: AppState) -> anyhow::Result<()> {
-    use anyhow::Context as _;
-
+/// Builds the Axum router with all configured routes and middleware.
+/// The caller is responsible for binding a listener and calling [`axum::serve`].
+pub fn build_router(state: AppState) -> axum::Router {
+    let has_access_log = state.config.http_api.access_log.is_some();
     let mut router = axum::Router::new().route("/v1/health", get(health));
     if state.config.http_api.update {
         router = router.route("/v1/update", post(post_update));
@@ -211,24 +215,24 @@ pub async fn start_server(state: AppState) -> anyhow::Result<()> {
     if state.config.http_api.metrics {
         router = router.route("/v1/metrics", get(get_metrics));
     }
-    let router = router.with_state(state.clone());
-    let router = if state.config.http_api.access_log.is_some() {
+    let router = router.with_state(state);
+    if has_access_log {
         router.layer(axum::middleware::from_fn(access_log_middleware))
     } else {
         router
-    };
+    }
+}
 
-    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], state.config.http_api.port));
-    let listener = tokio::net::TcpListener::bind(addr).await.with_context(|| {
-        format!(
-            "failed to bind HTTP API port {}",
-            state.config.http_api.port
-        )
-    })?;
-    info!(
-        port = state.config.http_api.port,
-        "HTTP API server listening"
-    );
+pub async fn start_server(state: AppState) -> anyhow::Result<()> {
+    use anyhow::Context as _;
+
+    let port = state.config.http_api.port;
+    let router = build_router(state);
+    let addr = std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = tokio::net::TcpListener::bind(addr)
+        .await
+        .with_context(|| format!("failed to bind HTTP API port {port}"))?;
+    info!(port, "HTTP API server listening");
     axum::serve(
         listener,
         router.into_make_service_with_connect_info::<SocketAddr>(),

@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use clap::Parser as _;
 use saurron::{
     cli::{Args, HeadWarnStrategy},
     config::{Config, DockerConfig},
     docker::{ContainerSelector, DockerClient},
+    http::{AppStateInner, build_router},
     registry::{FreshnessResult, NonSemverStrategy, RegistryClient},
     update::UpdateEngine,
 };
@@ -377,5 +380,246 @@ async fn update_cycle_updates_stale_container() {
     assert!(
         image.contains("v1.1.0"),
         "expected container image to contain 'v1.1.0', got: '{image}'"
+    );
+}
+
+// ── Helpers for HTTP-layer tests ──────────────────────────────────────────────
+
+/// Parse a counter value from Prometheus text exposition format.
+fn parse_prometheus_counter(text: &str, metric_name: &str) -> f64 {
+    let prefix = format!("{metric_name} ");
+    text.lines()
+        .find(|l| l.starts_with(&prefix))
+        .and_then(|l| l.split_whitespace().nth(1))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0.0)
+}
+
+fn selector_from_config(config: &Config) -> ContainerSelector {
+    ContainerSelector::new(
+        config.label_enable,
+        config.global_takes_precedence,
+        &config.disable_containers,
+        &config.containers,
+        config.include_restarting,
+        config.revive_stopped,
+    )
+}
+
+async fn start_saurron_server(state: Arc<AppStateInner>) -> u16 {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind saurron listener");
+    let port = listener.local_addr().unwrap().port();
+    let router = build_router(Arc::clone(&state));
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .await
+        .unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    port
+}
+
+// ── Test 7: POST /v1/update records scan cycle metric ────────────────────────
+
+#[tokio::test]
+#[ignore]
+async fn post_update_via_http_records_scan_cycle_metric() {
+    let docker = DockerClient::connect(&default_docker_config()).expect("docker connect");
+    docker.ping().await.expect("docker ping");
+
+    let config = Config::load(&Args::parse_from([
+        "saurron",
+        "--http-api-update",
+        "--http-api-metrics",
+        "--http-api-metrics-no-auth",
+        "--http-api-token",
+        "testtoken",
+    ]))
+    .expect("config load")
+    .0;
+
+    let registry =
+        RegistryClient::new(HeadWarnStrategy::Auto, "test", None).expect("registry client");
+    let selector = selector_from_config(&config);
+    let state = Arc::new(AppStateInner {
+        docker,
+        registry,
+        config,
+        selector,
+        update_lock: tokio::sync::Mutex::new(()),
+    });
+
+    let port = start_saurron_server(Arc::clone(&state)).await;
+    let base = format!("http://127.0.0.1:{port}");
+    let client = reqwest::Client::new();
+
+    let before = parse_prometheus_counter(
+        &client
+            .get(format!("{base}/v1/metrics"))
+            .send()
+            .await
+            .expect("GET /v1/metrics before")
+            .text()
+            .await
+            .expect("metrics body"),
+        "saurron_scan_cycles_total",
+    );
+
+    let status = client
+        .post(format!(
+            "{base}/v1/update?container=__nonexistent_saurron_test__"
+        ))
+        .header("Authorization", "Bearer testtoken")
+        .send()
+        .await
+        .expect("POST /v1/update")
+        .status();
+    assert_eq!(status.as_u16(), 200);
+
+    let after = parse_prometheus_counter(
+        &client
+            .get(format!("{base}/v1/metrics"))
+            .send()
+            .await
+            .expect("GET /v1/metrics after")
+            .text()
+            .await
+            .expect("metrics body"),
+        "saurron_scan_cycles_total",
+    );
+
+    assert_eq!(
+        after - before,
+        1.0,
+        "expected saurron_scan_cycles_total to increase by 1 (before={before} after={after})"
+    );
+}
+
+// ── Test 8: POST /v1/update dispatches webhook notification ──────────────────
+
+#[tokio::test]
+#[ignore]
+async fn post_update_via_http_dispatches_webhook_on_update() {
+    use axum::{Router, body::Bytes, routing::post};
+
+    const CONTAINER: &str = "saurron-integ-http-webhook";
+
+    struct CleanupGuard(&'static str);
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            let _ = std::process::Command::new("docker")
+                .args(["rm", "-f", self.0])
+                .output();
+        }
+    }
+    let _guard = CleanupGuard(CONTAINER);
+
+    // 1. Local registry + two SemVer image versions.
+    let (_registry, api_host, registry_port) = start_local_registry().await;
+
+    let v1_docker = format!("localhost:{registry_port}/saurron-wh-test:v1.0.0");
+    let v2_docker = format!("localhost:{registry_port}/saurron-wh-test:v1.1.0");
+    let v1_api = format!("{api_host}:{registry_port}/saurron-wh-test:v1.0.0");
+    let v2_api = format!("{api_host}:{registry_port}/saurron-wh-test:v1.1.0");
+
+    docker_cmd(&["pull", "busybox:latest"]);
+    tag_and_push("busybox:latest", &v1_docker);
+    tag_and_push("busybox:latest", &v2_docker);
+    docker_cmd(&["tag", &v1_docker, &v1_api]);
+    docker_cmd(&["tag", &v2_docker, &v2_api]);
+
+    docker_cmd(&[
+        "run",
+        "-d",
+        "--name",
+        CONTAINER,
+        "-l",
+        "saurron.enable=true",
+        &v1_api,
+        "sleep",
+        "3600",
+    ]);
+
+    // 2. Webhook receiver.
+    let received: Arc<tokio::sync::Mutex<Option<String>>> = Arc::new(tokio::sync::Mutex::new(None));
+    let received_clone = Arc::clone(&received);
+    let wh_app = Router::new().route(
+        "/hook",
+        post(move |body: Bytes| {
+            let slot = Arc::clone(&received_clone);
+            async move {
+                *slot.lock().await = Some(String::from_utf8_lossy(&body).into_owned());
+                axum::http::StatusCode::OK
+            }
+        }),
+    );
+    let wh_listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind webhook listener");
+    let wh_port = wh_listener.local_addr().unwrap().port();
+    tokio::spawn(async move { axum::serve(wh_listener, wh_app).await.unwrap() });
+
+    // 3. Build Saurron HTTP server with webhook config.
+    let docker = DockerClient::connect(&default_docker_config()).expect("docker connect");
+    docker.ping().await.expect("docker ping");
+
+    let webhook_url = format!("http://127.0.0.1:{wh_port}/hook");
+    let config = Config::load(&Args::parse_from([
+        "saurron",
+        "--http-api-update",
+        "--http-api-token",
+        "testtoken",
+        "--no-pull",
+        "--label-enable",
+        "--webhook-url",
+        &webhook_url,
+    ]))
+    .expect("config load")
+    .0;
+
+    let registry =
+        RegistryClient::new(HeadWarnStrategy::Auto, "test", None).expect("registry client");
+    let selector = selector_from_config(&config);
+    let state = Arc::new(AppStateInner {
+        docker,
+        registry,
+        config,
+        selector,
+        update_lock: tokio::sync::Mutex::new(()),
+    });
+
+    let saurron_port = start_saurron_server(Arc::clone(&state)).await;
+
+    // 4. Trigger update.
+    let status = reqwest::Client::new()
+        .post(format!("http://127.0.0.1:{saurron_port}/v1/update"))
+        .header("Authorization", "Bearer testtoken")
+        .send()
+        .await
+        .expect("POST /v1/update")
+        .status();
+    assert_eq!(status.as_u16(), 200);
+
+    // 5. Wait for the webhook (dispatch is awaited before the HTTP response returns,
+    //    so the POST to the receiver is in-flight but may not yet be processed).
+    let body = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            if let Some(v) = received.lock().await.take() {
+                return v;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("timed out waiting for webhook body");
+
+    assert!(
+        body.contains(CONTAINER),
+        "webhook body should mention updated container '{CONTAINER}', got: {body}"
     );
 }
