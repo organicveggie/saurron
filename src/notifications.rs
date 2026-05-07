@@ -135,9 +135,20 @@ pub async fn dispatch(config: &NotificationsConfig, report: &SessionReport) {
     ] {
         match result {
             Ok(()) => info!(target = name, "notification dispatched"),
-            Err(e) => error!(target = name, error = %e, "notification dispatch failed"),
+            Err(e) => {
+                error!(target = name, error = %error_chain(&e), "notification dispatch failed")
+            }
         }
     }
+}
+
+/// Format the full anyhow error chain as a single colon-separated string.
+/// anyhow's Display only shows the outermost context; this includes every cause.
+fn error_chain(e: &anyhow::Error) -> String {
+    e.chain()
+        .map(|c| c.to_string())
+        .collect::<Vec<_>>()
+        .join(": ")
 }
 
 // ── Per-target senders ────────────────────────────────────────────────────────
@@ -200,13 +211,23 @@ pub async fn send_email(cfg: &EmailConfig, body: &str) -> Result<()> {
         let tls = TlsParameters::builder(cfg.server.clone())
             .dangerous_accept_invalid_certs(true)
             .build()
-            .context("failed to build TLS parameters")?;
+            .with_context(|| {
+                format!(
+                    "failed to build TLS parameters for {}:{}",
+                    cfg.server, cfg.port
+                )
+            })?;
         AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&cfg.server)
             .port(cfg.port)
             .tls(Tls::Required(tls))
     } else {
         AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&cfg.server)
-            .context("failed to create SMTP relay")?
+            .with_context(|| {
+                format!(
+                    "failed to create SMTP relay for {}:{}",
+                    cfg.server, cfg.port
+                )
+            })?
             .port(cfg.port)
     };
 
@@ -214,11 +235,12 @@ pub async fn send_email(cfg: &EmailConfig, body: &str) -> Result<()> {
         builder = builder.credentials(Credentials::new(u.clone(), p.clone()));
     }
 
-    builder
-        .build()
-        .send(email)
-        .await
-        .context("SMTP send failed")?;
+    builder.build().send(email).await.with_context(|| {
+        format!(
+            "SMTP send failed (server: {}:{}, from: {})",
+            cfg.server, cfg.port, cfg.from
+        )
+    })?;
     Ok(())
 }
 
