@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -94,8 +95,23 @@ pub struct RegistryClient {
     client: reqwest::Client,
     head_warn_strategy: HeadWarnStrategy,
     user_agent: String,
-    /// Optional `(username, password)` for registry authentication.
+    /// Global fallback credentials applied when no per-registry entry matches.
     credentials: Option<(String, String)>,
+    /// Per-registry overrides keyed by normalised hostname.
+    /// `Some((u, p))` → use those credentials.
+    /// `None` (key present, value `None`) → explicit anonymous for this registry.
+    per_registry: HashMap<String, Option<(String, String)>>,
+}
+
+/// Normalise a registry hostname so both user-facing aliases and internal
+/// hostnames resolve to the same key. Currently maps `"docker.io"` →
+/// `"registry-1.docker.io"`; all other values are returned unchanged.
+pub fn normalize_registry_host(host: &str) -> String {
+    if host == "docker.io" {
+        "registry-1.docker.io".to_string()
+    } else {
+        host.to_string()
+    }
 }
 
 impl RegistryClient {
@@ -103,17 +119,48 @@ impl RegistryClient {
         head_warn_strategy: HeadWarnStrategy,
         version: &str,
         credentials: Option<(String, String)>,
+        per_registry_entries: Vec<(String, Option<(String, String)>)>,
     ) -> Result<Self> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
             .context("failed to build registry HTTP client")?;
+        let per_registry = per_registry_entries
+            .into_iter()
+            .map(|(host, creds)| (normalize_registry_host(&host), creds))
+            .collect();
         Ok(Self {
             client,
             head_warn_strategy,
             user_agent: format!("saurron/{version}"),
             credentials,
+            per_registry,
         })
+    }
+
+    /// Resolve credentials for a registry hostname.
+    ///
+    /// Lookup order:
+    /// 1. Per-registry entry — `Some(creds)` to use those, `None` for explicit anonymous.
+    /// 2. Global credentials (`self.credentials`).
+    /// 3. Anonymous (if no global credentials).
+    fn credentials_for(&self, registry: &str) -> Option<(String, String)> {
+        if let Some(entry) = self.per_registry.get(registry) {
+            entry.clone()
+        } else {
+            self.credentials.clone()
+        }
+    }
+
+    /// Resolve credentials for the registry that hosts `image`.
+    ///
+    /// Parses the image reference to extract the registry hostname, then
+    /// delegates to [`credentials_for`].
+    pub(crate) fn credentials_for_image(&self, image: &str) -> Option<(String, String)> {
+        let registry = parse_image_ref(image)
+            .map(|r| r.registry)
+            .unwrap_or_default();
+        self.credentials_for(&registry)
     }
 
     pub async fn check_freshness(
@@ -346,7 +393,8 @@ impl RegistryClient {
         // docker.io requires a POST to the Hub API when credentials are present.
         // Without credentials, fall through to the standard anonymous GET flow —
         // auth.docker.io/token issues anonymous tokens for public images.
-        if registry == "registry-1.docker.io" && self.credentials.is_some() {
+        let creds = self.credentials_for(registry);
+        if registry == "registry-1.docker.io" && creds.is_some() {
             return self.fetch_docker_hub_token(registry).await;
         }
 
@@ -375,7 +423,7 @@ impl RegistryClient {
         if !scope.is_empty() {
             req = req.query(&[("scope", &scope)]);
         }
-        if let Some((ref username, ref password)) = self.credentials {
+        if let Some((ref username, ref password)) = creds {
             req = req.basic_auth(username, Some(password));
         }
 
@@ -401,7 +449,7 @@ impl RegistryClient {
     }
 
     async fn fetch_docker_hub_token(&self, registry: &str) -> Result<String, RegistryError> {
-        let Some((ref username, ref password)) = self.credentials else {
+        let Some((ref username, ref password)) = self.credentials_for(registry) else {
             return Err(RegistryError::AuthFailed {
                 registry: registry.to_string(),
                 reason: "no credentials configured for docker.io".to_string(),
@@ -1046,9 +1094,116 @@ mod tests {
 
     // ── docker hub token auth ─────────────────────────────────────────────────
 
+    // ── normalize_registry_host ───────────────────────────────────────────────
+
+    #[test]
+    fn normalize_docker_io_to_registry_docker_io() {
+        assert_eq!(normalize_registry_host("docker.io"), "registry-1.docker.io");
+    }
+
+    #[test]
+    fn normalize_registry_docker_io_unchanged() {
+        assert_eq!(
+            normalize_registry_host("registry-1.docker.io"),
+            "registry-1.docker.io"
+        );
+    }
+
+    #[test]
+    fn normalize_other_host_unchanged() {
+        assert_eq!(normalize_registry_host("ghcr.io"), "ghcr.io");
+        assert_eq!(normalize_registry_host("quay.io"), "quay.io");
+    }
+
+    // ── credentials_for ───────────────────────────────────────────────────────
+
+    fn client_with(
+        global: Option<(&str, &str)>,
+        per: Vec<(&str, Option<(&str, &str)>)>,
+    ) -> RegistryClient {
+        let global = global.map(|(u, p)| (u.to_string(), p.to_string()));
+        let per_entries = per
+            .into_iter()
+            .map(|(host, c)| {
+                (
+                    host.to_string(),
+                    c.map(|(u, p)| (u.to_string(), p.to_string())),
+                )
+            })
+            .collect();
+        RegistryClient::new(HeadWarnStrategy::Auto, "test", global, per_entries).unwrap()
+    }
+
+    #[test]
+    fn credentials_for_uses_per_registry_when_present() {
+        let c = client_with(
+            Some(("global_user", "global_pass")),
+            vec![("ghcr.io", Some(("ghcr_user", "ghcr_pass")))],
+        );
+        assert_eq!(
+            c.credentials_for("ghcr.io"),
+            Some(("ghcr_user".into(), "ghcr_pass".into()))
+        );
+    }
+
+    #[test]
+    fn credentials_for_falls_back_to_global_when_no_per_registry_entry() {
+        let c = client_with(Some(("global_user", "global_pass")), vec![]);
+        assert_eq!(
+            c.credentials_for("ghcr.io"),
+            Some(("global_user".into(), "global_pass".into()))
+        );
+    }
+
+    #[test]
+    fn credentials_for_explicit_anonymous_overrides_global() {
+        let c = client_with(
+            Some(("global_user", "global_pass")),
+            vec![("quay.io", None)],
+        );
+        assert_eq!(c.credentials_for("quay.io"), None);
+    }
+
+    #[test]
+    fn credentials_for_anonymous_when_no_entry_and_no_global() {
+        let c = client_with(None, vec![]);
+        assert_eq!(c.credentials_for("ghcr.io"), None);
+    }
+
+    #[test]
+    fn credentials_for_normalizes_docker_io_on_insert() {
+        let c = client_with(None, vec![("docker.io", Some(("u", "p")))]);
+        assert_eq!(
+            c.credentials_for("registry-1.docker.io"),
+            Some(("u".into(), "p".into()))
+        );
+    }
+
+    // ── credentials_for_image ─────────────────────────────────────────────────
+
+    #[test]
+    fn credentials_for_image_resolves_ghcr_image() {
+        let c = client_with(None, vec![("ghcr.io", Some(("ghcr_user", "ghcr_token")))]);
+        assert_eq!(
+            c.credentials_for_image("ghcr.io/org/repo:latest"),
+            Some(("ghcr_user".into(), "ghcr_token".into()))
+        );
+    }
+
+    #[test]
+    fn credentials_for_image_falls_back_to_global_for_unlisted_registry() {
+        let c = client_with(Some(("global_user", "global_pass")), vec![]);
+        assert_eq!(
+            c.credentials_for_image("quay.io/org/image:latest"),
+            Some(("global_user".into(), "global_pass".into()))
+        );
+    }
+
+    // ── docker hub token auth ─────────────────────────────────────────────────
+
     #[tokio::test]
     async fn docker_hub_token_no_credentials_returns_auth_failed() {
-        let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None).unwrap();
+        let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![]).unwrap();
         let err = client
             .test_fetch_docker_hub_token_no_creds()
             .await

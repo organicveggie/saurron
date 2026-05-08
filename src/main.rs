@@ -227,16 +227,31 @@ async fn main() -> anyhow::Result<()> {
         info!(id = %c.id, name = %c.name, image = %c.image, state = %c.state, "Container selected");
     }
 
-    let credentials = match (
+    let global_credentials = match (
         config.registry_username.clone(),
         config.registry_password.clone(),
     ) {
         (Some(u), Some(p)) => Some((u, p)),
         _ => None,
     };
-    let registry_client =
-        registry::RegistryClient::new(config.head_warn_strategy, VERSION, credentials)
-            .context("failed to initialise registry client")?;
+    let per_registry: Vec<(String, Option<(String, String)>)> = config
+        .registry_credentials
+        .iter()
+        .map(|rc| {
+            let creds = match (&rc.username, &rc.password) {
+                (Some(u), Some(p)) => Some((u.clone(), p.clone())),
+                _ => None,
+            };
+            (rc.host.clone(), creds)
+        })
+        .collect();
+    let registry_client = registry::RegistryClient::new(
+        config.head_warn_strategy,
+        VERSION,
+        global_credentials,
+        per_registry,
+    )
+    .context("failed to initialise registry client")?;
 
     let state = Arc::new(http::AppStateInner {
         docker,
