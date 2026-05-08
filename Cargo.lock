@@ -2408,6 +2408,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "testcontainers",
  "thiserror 2.0.18",
  "tokio",
