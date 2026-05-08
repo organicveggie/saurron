@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use axum::{
     Json,
+    body::Bytes,
     extract::{ConnectInfo, Query, State},
     http::{HeaderMap, StatusCode, header},
     response::{IntoResponse, Response},
@@ -29,6 +30,151 @@ pub type AppState = Arc<AppStateInner>;
 struct UpdateQuery {
     container: Option<String>,
     image: Option<String>,
+}
+
+/// Deserialises from a JSON string (optionally comma-separated) or a JSON/form
+/// array into a `Vec<String>`. Values are split on commas and trimmed.
+#[derive(Debug)]
+struct StringOrVec(Vec<String>);
+
+impl<'de> Deserialize<'de> for StringOrVec {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = StringOrVec;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "a string or array of strings")
+            }
+            fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<StringOrVec, E> {
+                Ok(StringOrVec(
+                    v.split(',')
+                        .map(str::trim)
+                        .filter(|s| !s.is_empty())
+                        .map(String::from)
+                        .collect(),
+                ))
+            }
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<StringOrVec, A::Error> {
+                let mut out = Vec::new();
+                while let Some(s) = seq.next_element::<String>()? {
+                    out.extend(
+                        s.split(',')
+                            .map(str::trim)
+                            .filter(|s| !s.is_empty())
+                            .map(String::from),
+                    );
+                }
+                Ok(StringOrVec(out))
+            }
+        }
+        d.deserialize_any(Visitor)
+    }
+}
+
+/// Optional request body for `POST /v1/update`.
+#[derive(Debug, Default, Deserialize)]
+struct UpdateBody {
+    container: Option<StringOrVec>,
+    image: Option<StringOrVec>,
+}
+
+/// Error returned by body-parsing and filter-merging helpers.
+#[derive(Debug)]
+enum UpdateParamError {
+    BadRequest(String),
+    UnsupportedMediaType,
+}
+
+impl IntoResponse for UpdateParamError {
+    fn into_response(self) -> Response {
+        match self {
+            Self::BadRequest(msg) => (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({"error": msg})),
+            )
+                .into_response(),
+            Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
+        }
+    }
+}
+
+/// Container and image scope filters resolved from query params and/or body.
+type UpdateFilters = (Option<Vec<String>>, Option<Vec<String>>);
+
+/// Parse an optional request body as JSON or form-encoded.
+///
+/// Returns `Ok(None)` for an empty body, `Ok(Some(_))` on success,
+/// or `Err` (400 or 415) on failure.
+fn parse_update_body(
+    content_type: Option<&str>,
+    body: &[u8],
+) -> Result<Option<UpdateBody>, UpdateParamError> {
+    if body.is_empty() {
+        return Ok(None);
+    }
+    let ct = content_type.unwrap_or("");
+    if ct.starts_with("application/json") {
+        serde_json::from_slice(body)
+            .map(Some)
+            .map_err(|e| UpdateParamError::BadRequest(format!("invalid JSON body: {e}")))
+    } else if ct.starts_with("application/x-www-form-urlencoded") {
+        serde_urlencoded::from_bytes(body)
+            .map(Some)
+            .map_err(|e| UpdateParamError::BadRequest(format!("invalid form body: {e}")))
+    } else {
+        Err(UpdateParamError::UnsupportedMediaType)
+    }
+}
+
+/// Merge query params and an optional body into `(container_filter, image_filter)`.
+///
+/// Returns `Err` (400) if the same field is present in both.
+fn resolve_update_filters(
+    query: &UpdateQuery,
+    body: Option<UpdateBody>,
+) -> Result<UpdateFilters, UpdateParamError> {
+    let body_container = body.as_ref().and_then(|b| b.container.as_ref());
+    let body_image = body.as_ref().and_then(|b| b.image.as_ref());
+
+    if query.container.is_some() && body_container.is_some() {
+        return Err(UpdateParamError::BadRequest(
+            "'container' specified in both query params and request body".into(),
+        ));
+    }
+    if query.image.is_some() && body_image.is_some() {
+        return Err(UpdateParamError::BadRequest(
+            "'image' specified in both query params and request body".into(),
+        ));
+    }
+
+    let container = query
+        .container
+        .as_deref()
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect()
+        })
+        .or_else(|| body_container.map(|sv| sv.0.clone()));
+
+    let image = query
+        .image
+        .as_deref()
+        .map(|s| {
+            s.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(String::from)
+                .collect()
+        })
+        .or_else(|| body_image.map(|sv| sv.0.clone()));
+
+    Ok((container, image))
 }
 
 /// Validate that the HTTP API token configuration is consistent.
@@ -79,12 +225,26 @@ async fn post_update(
     State(state): State<AppState>,
     Query(query): Query<UpdateQuery>,
     headers: HeaderMap,
+    body: Bytes,
 ) -> Response {
     if let Some(token) = &state.config.http_api.token
         && !check_auth(&headers, token)
     {
         return StatusCode::UNAUTHORIZED.into_response();
     }
+
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok());
+    let body_params = match parse_update_body(content_type, &body) {
+        Ok(p) => p,
+        Err(e) => return e.into_response(),
+    };
+
+    let (container_filter, image_filter) = match resolve_update_filters(&query, body_params) {
+        Ok(f) => f,
+        Err(e) => return e.into_response(),
+    };
 
     let Ok(_guard) = state.update_lock.try_lock() else {
         metrics::record_skipped_cycle();
@@ -100,13 +260,12 @@ async fn post_update(
     };
     let mut selected = state.docker.select_containers(&all, &state.selector);
 
-    if let Some(ref names) = query.container {
-        let allowed: std::collections::HashSet<&str> = names.split(',').map(str::trim).collect();
+    if let Some(ref names) = container_filter {
+        let allowed: std::collections::HashSet<&str> = names.iter().map(String::as_str).collect();
         selected.retain(|c| allowed.contains(c.name.as_str()));
     }
-    if let Some(ref image_filter) = query.image {
-        let images: Vec<&str> = image_filter.split(',').map(str::trim).collect();
-        selected.retain(|c| images.iter().any(|img| c.image.starts_with(img)));
+    if let Some(ref images) = image_filter {
+        selected.retain(|c| images.iter().any(|img| c.image.starts_with(img.as_str())));
     }
 
     let report = update::UpdateEngine::new(&state.docker, &state.registry, &state.config)
@@ -334,5 +493,178 @@ mod tests {
     #[test]
     fn redact_authorization_bare_value() {
         assert_eq!(redact_authorization("notype"), "[REDACTED]");
+    }
+
+    // ── StringOrVec ───────────────────────────────────────────────────────────
+
+    fn parse_sov_json(s: &str) -> Vec<String> {
+        serde_json::from_str::<StringOrVec>(s).unwrap().0
+    }
+
+    #[test]
+    fn string_or_vec_single_string() {
+        assert_eq!(parse_sov_json(r#""nginx""#), vec!["nginx"]);
+    }
+
+    #[test]
+    fn string_or_vec_comma_separated_string() {
+        assert_eq!(parse_sov_json(r#""nginx,redis""#), vec!["nginx", "redis"]);
+    }
+
+    #[test]
+    fn string_or_vec_json_array() {
+        assert_eq!(
+            parse_sov_json(r#"["nginx","redis"]"#),
+            vec!["nginx", "redis"]
+        );
+    }
+
+    #[test]
+    fn string_or_vec_trims_whitespace() {
+        assert_eq!(
+            parse_sov_json(r#"" nginx , redis ""#),
+            vec!["nginx", "redis"]
+        );
+    }
+
+    #[test]
+    fn string_or_vec_via_form_encoding() {
+        let body: UpdateBody = serde_urlencoded::from_str("container=nginx,redis").unwrap();
+        assert_eq!(body.container.unwrap().0, vec!["nginx", "redis"]);
+    }
+
+    // ── parse_update_body ─────────────────────────────────────────────────────
+
+    #[test]
+    fn parse_body_empty_is_none() {
+        assert!(parse_update_body(None, b"").unwrap().is_none());
+    }
+
+    #[test]
+    fn parse_body_json_string_fields() {
+        let b = parse_update_body(
+            Some("application/json"),
+            br#"{"container":"nginx","image":"nginx:latest"}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(b.container.unwrap().0, vec!["nginx"]);
+        assert_eq!(b.image.unwrap().0, vec!["nginx:latest"]);
+    }
+
+    #[test]
+    fn parse_body_json_array_fields() {
+        let b = parse_update_body(
+            Some("application/json"),
+            br#"{"container":["nginx","redis"]}"#,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(b.container.unwrap().0, vec!["nginx", "redis"]);
+    }
+
+    #[test]
+    fn parse_body_form_encoded() {
+        let b = parse_update_body(
+            Some("application/x-www-form-urlencoded"),
+            b"container=nginx,redis",
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(b.container.unwrap().0, vec!["nginx", "redis"]);
+    }
+
+    #[test]
+    fn parse_body_wrong_content_type_returns_415() {
+        assert!(matches!(
+            parse_update_body(Some("text/plain"), b"container=nginx").unwrap_err(),
+            UpdateParamError::UnsupportedMediaType
+        ));
+    }
+
+    #[test]
+    fn parse_body_absent_content_type_with_body_returns_415() {
+        assert!(matches!(
+            parse_update_body(None, b"container=nginx").unwrap_err(),
+            UpdateParamError::UnsupportedMediaType
+        ));
+    }
+
+    #[test]
+    fn parse_body_malformed_json_returns_400() {
+        assert!(matches!(
+            parse_update_body(Some("application/json"), b"{bad json}").unwrap_err(),
+            UpdateParamError::BadRequest(_)
+        ));
+    }
+
+    // ── resolve_update_filters ────────────────────────────────────────────────
+
+    fn query(container: Option<&str>, image: Option<&str>) -> UpdateQuery {
+        UpdateQuery {
+            container: container.map(String::from),
+            image: image.map(String::from),
+        }
+    }
+
+    fn body_with(container: Option<&str>, image: Option<&str>) -> Option<UpdateBody> {
+        Some(UpdateBody {
+            container: container.map(|s| StringOrVec(vec![s.to_string()])),
+            image: image.map(|s| StringOrVec(vec![s.to_string()])),
+        })
+    }
+
+    #[test]
+    fn resolve_query_only() {
+        let (c, i) = resolve_update_filters(&query(Some("nginx,redis"), None), None).unwrap();
+        assert_eq!(c.unwrap(), vec!["nginx", "redis"]);
+        assert!(i.is_none());
+    }
+
+    #[test]
+    fn resolve_body_only() {
+        let (c, i) =
+            resolve_update_filters(&query(None, None), body_with(Some("nginx"), None)).unwrap();
+        assert_eq!(c.unwrap(), vec!["nginx"]);
+        assert!(i.is_none());
+    }
+
+    #[test]
+    fn resolve_no_overlap_different_fields() {
+        let (c, i) = resolve_update_filters(
+            &query(Some("nginx"), None),
+            body_with(None, Some("nginx:latest")),
+        )
+        .unwrap();
+        assert_eq!(c.unwrap(), vec!["nginx"]);
+        assert_eq!(i.unwrap(), vec!["nginx:latest"]);
+    }
+
+    #[test]
+    fn resolve_conflict_container_returns_400() {
+        assert!(matches!(
+            resolve_update_filters(&query(Some("nginx"), None), body_with(Some("nginx"), None),)
+                .unwrap_err(),
+            UpdateParamError::BadRequest(_)
+        ));
+    }
+
+    #[test]
+    fn resolve_conflict_image_returns_400() {
+        assert!(matches!(
+            resolve_update_filters(
+                &query(None, Some("nginx:latest")),
+                body_with(None, Some("nginx:latest")),
+            )
+            .unwrap_err(),
+            UpdateParamError::BadRequest(_)
+        ));
+    }
+
+    #[test]
+    fn resolve_no_params_returns_none_filters() {
+        let (c, i) = resolve_update_filters(&query(None, None), None).unwrap();
+        assert!(c.is_none());
+        assert!(i.is_none());
     }
 }

@@ -80,26 +80,64 @@ state. The following options enable additional states:
 If Saurron is already in the middle of an update cycle, this will return `409 Conflict` with an
 empty response body.
 
-**Query parameters (Optional)**
+**Parameters**
 
-- `image=myorg/myapp` - restrict to containers using this image (comma-separated).
-- `container=mycontainer` — restrict to specific container by name (comma-separated)
+Scope filters can be supplied as query parameters, as a JSON request body, or as a
+form-encoded request body. Supplying the same field in both query params and the body
+returns `400 Bad Request`.
 
-**Response**
+| Field | Description |
+| :---- | :---------- |
+| `container` | Restrict to one or more container names. Comma-separated string or (JSON only) array. |
+| `image` | Restrict to containers whose image starts with the given prefix. Comma-separated string or (JSON only) array. |
+
+**Status codes**
+
+| Code | Meaning |
+| :--- | :------ |
+| `200 OK` | Cycle completed; body is a JSON `SessionReport`. |
+| `400 Bad Request` | A filter field was supplied in both query params and body, or the body could not be parsed. Body contains `{"error": "..."}`. |
+| `409 Conflict` | Another update cycle is already running. |
+| `415 Unsupported Media Type` | A non-empty body was sent with a `Content-Type` other than `application/json` or `application/x-www-form-urlencoded`. |
 
 **Examples**
 
-```shell
-$ curl -XPOST http://localhost:8080/v1/metrics \
-    -H 'Authorization: Bearer ABC123' \
-```
+No filter — update all containers:
 
 ```shell
-$ curl -XPOST http://localhost:8080/v1/metrics?image=myorg/myapp \
-    -H 'Authorization: Bearer ABC123' \
+$ curl -XPOST http://localhost:8080/v1/update \
+    -H 'Authorization: Bearer ABC123'
 ```
 
+Query parameter:
+
 ```shell
-$ curl -XPOST http://localhost:8080/v1/metrics?container=mycontainer \
+$ curl -XPOST 'http://localhost:8080/v1/update?container=nginx,redis' \
+    -H 'Authorization: Bearer ABC123'
+```
+
+JSON body — comma-separated string:
+
+```shell
+$ curl -XPOST http://localhost:8080/v1/update \
     -H 'Authorization: Bearer ABC123' \
+    -H 'Content-Type: application/json' \
+    -d '{"container": "nginx,redis"}'
+```
+
+JSON body — array:
+
+```shell
+$ curl -XPOST http://localhost:8080/v1/update \
+    -H 'Authorization: Bearer ABC123' \
+    -H 'Content-Type: application/json' \
+    -d '{"container": ["nginx", "redis"], "image": "myorg/myapp"}'
+```
+
+Form-encoded body:
+
+```shell
+$ curl -XPOST http://localhost:8080/v1/update \
+    -H 'Authorization: Bearer ABC123' \
+    --data-urlencode 'container=nginx,redis'
 ```
