@@ -96,7 +96,14 @@ impl IntoResponse for UpdateParamError {
                 Json(serde_json::json!({"error": msg})),
             )
                 .into_response(),
-            Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE.into_response(),
+            Self::UnsupportedMediaType => (
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                [(
+                    "Accept-Post",
+                    "application/json, application/x-www-form-urlencoded",
+                )],
+            )
+                .into_response(),
         }
     }
 }
@@ -588,6 +595,18 @@ mod tests {
             parse_update_body(None, b"container=nginx").unwrap_err(),
             UpdateParamError::UnsupportedMediaType
         ));
+    }
+
+    #[test]
+    fn unsupported_media_type_response_includes_accept_post_header() {
+        let resp = UpdateParamError::UnsupportedMediaType.into_response();
+        assert_eq!(resp.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+        assert_eq!(
+            resp.headers()
+                .get("Accept-Post")
+                .and_then(|v| v.to_str().ok()),
+            Some("application/json, application/x-www-form-urlencoded"),
+        );
     }
 
     #[test]
