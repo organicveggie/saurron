@@ -11,17 +11,22 @@ title: Container Images
 
 ## Supported Tags
 
-- [`0.9, 0, latest, 0.9-trixie, 0-trixie, trixie`](https://github.com/organicveggie/saurron/docker/trixie/full/Dockerfile)
+{% assign v  = site.data.release.version %}
+{% assign mm = site.data.release.major_minor %}
+{% assign m  = site.data.release.major %}
+{% assign base = "https://github.com/organicveggie/saurron/blob/main/docker" %}
 
-- [`0.9-slim, 0-slim, slim, 0.9-slim-trixie, 0-slim-trixie, slim-trixie`](https://github.com/organicveggie/saurron/docker/trixie/slim/Dockerfile)
+- [`{{ v }}-trixie`]({{ base }}/trixie/full/Dockerfile), [`{{ mm }}-trixie`]({{ base }}/trixie/full/Dockerfile), [`{{ m }}-trixie`]({{ base }}/trixie/full/Dockerfile), [`{{ v }}`]({{ base }}/trixie/full/Dockerfile), [`{{ mm }}`]({{ base }}/trixie/full/Dockerfile), [`{{ m }}`]({{ base }}/trixie/full/Dockerfile), [`latest`]({{ base }}/trixie/full/Dockerfile)
 
-- [`0.9-bookworm`, `0-bookworm`, `bookworm`](https://github.com/organicveggie/saurron/docker/bookworm/full/Dockerfile)
+- [`{{ v }}-slim-trixie`]({{ base }}/trixie/slim/Dockerfile), [`{{ mm }}-slim-trixie`]({{ base }}/trixie/slim/Dockerfile), [`{{ m }}-slim-trixie`]({{ base }}/trixie/slim/Dockerfile), [`slim-{{ v }}`]({{ base }}/trixie/slim/Dockerfile), [`slim-{{ mm }}`]({{ base }}/trixie/slim/Dockerfile), [`slim-{{ m }}`]({{ base }}/trixie/slim/Dockerfile), [`slim`]({{ base }}/trixie/slim/Dockerfile)
 
-- [`0.9-slim-bookworm`, `0-slim-bookworm`, `slim-bookworm`](https://github.com/organicveggie/saurron/docker/bookworm/slim/Dockerfile)
+- [`{{ v }}-bookworm`]({{ base }}/bookworm/full/Dockerfile), [`{{ mm }}-bookworm`]({{ base }}/bookworm/full/Dockerfile), [`{{ m }}-bookworm`]({{ base }}/bookworm/full/Dockerfile)
 
-- [`0.9-bullseye`, `0-bullseye`, `bullseye`](https://github.com/organicveggie/saurron/docker/bullseye/full/Dockerfile)
+- [`{{ v }}-slim-bookworm`]({{ base }}/bookworm/slim/Dockerfile), [`{{ mm }}-slim-bookworm`]({{ base }}/bookworm/slim/Dockerfile), [`{{ m }}-slim-bookworm`]({{ base }}/bookworm/slim/Dockerfile)
 
-- [`0.9-slim-bullseye`, `0-slim-bullseye`, `slim-bullseye`](https://github.com/organicveggie/saurron/docker/bullseye/slim/Dockerfile)
+- [`{{ v }}-bullseye`]({{ base }}/bullseye/full/Dockerfile), [`{{ mm }}-bullseye`]({{ base }}/bullseye/full/Dockerfile), [`{{ m }}-bullseye`]({{ base }}/bullseye/full/Dockerfile)
+
+- [`{{ v }}-slim-bullseye`]({{ base }}/bullseye/slim/Dockerfile), [`{{ mm }}-slim-bullseye`]({{ base }}/bullseye/slim/Dockerfile), [`{{ m }}-slim-bullseye`]({{ base }}/bullseye/slim/Dockerfile)
 
 ## Quick Reference
 
