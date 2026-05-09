@@ -29,7 +29,7 @@ jobs:
       - name: Display Runner Info
         run: |
           echo "Running on: ${{ matrix.platform }}"
-          echo "Dockerfile: ${{ matrix.release }}/${{ matrix.variant }}/Dockerfile"
+          echo "Dockerfile: docker/${{ matrix.release }}/${{ matrix.variant }}/Dockerfile"
           uname -m
 
       # Artifact names cannot contain slashes, so convert linux/amd64 → linux-amd64.
@@ -61,7 +61,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.release }}/${{ matrix.variant }}/Dockerfile
+          file: docker/${{ matrix.release }}/${{ matrix.variant }}/Dockerfile
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: SAURRON_BUILD_VERSION=${{ github.ref_name }}
