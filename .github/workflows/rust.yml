@@ -62,11 +62,12 @@ jobs:
     needs: [lint, build]
     steps:
       - uses: actions/checkout@v6
-      - name: Build Docker image
+      - name: Build Docker image (Trixie Slim)
         run: |
           docker build \
             --build-arg SAURRON_BUILD_VERSION=ci-test \
             -t saurron:ci-test \
+            -f docker/trixie/slim/Dockerfile
             .
       - name: Smoke test — binary runs inside image
         run: docker run --rm saurron:ci-test --help
