@@ -17,7 +17,7 @@ lettre = { version = "0.11", default-features = false, features = ["tokio1-rustl
 minijinja = "2"
 prometheus = "0.14"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
-rumqttc-next = "0.31.0"
+rumqttc-next = "0.33.0"
 rustls-native-certs = "0.8"
 rustls-pemfile = "2"
 semver = { version = "1", features = ["serde"] }

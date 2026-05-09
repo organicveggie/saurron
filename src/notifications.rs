@@ -415,7 +415,7 @@ pub async fn send_mqtt(cfg: &MqttConfig, body: &str) -> Result<()> {
         opts.set_transport(Transport::tls_with_config(tls_config.into()));
     }
 
-    let (client, mut eventloop) = AsyncClient::builder(opts).capacity(16).build_async();
+    let (client, mut eventloop) = AsyncClient::builder(opts).capacity(16).build();
 
     // Spawn the event loop driver.
     let driver = tokio::spawn(async move {
