@@ -34,6 +34,8 @@ listed at the end.
 | `--include-restarting`                                       | `SAURRON_INCLUDE_RESTARTING`                 | `include_restarting`                    |
 | `--interval <duration>`                                      | `SAURRON_POLL_INTERVAL`                      | `poll_interval`                         |
 | `--label-enable`                                             | `SAURRON_LABEL_ENABLE`                       | `label_enable`                          |
+| `--log-access-to-stdout`                                     | `SAURRON_LOG_ACCESS_TO_STDOUT`               | `log_access_to_stdout`                  |
+| `--log-audit-to-stdout`                                      | `SAURRON_LOG_AUDIT_TO_STDOUT`                | `log_audit_to_stdout`                   |
 | `--log-format <format>`                                      | `SAURRON_LOG_FORMAT`                         | `log_format`                            |
 | `--log-level <level>`                                        | `SAURRON_LOG_LEVEL`                          | `log_level`                             |
 | `--monitor-only`                                             | `SAURRON_MONITOR_ONLY`                       | `monitor_only`                          |

@@ -147,3 +147,38 @@ The HTTP API access log is configured under the `[http_api]` TOML section and re
 structured JSON entry per incoming request.
 
 See [HTTP API — Access log]({% link _start/config/http-api.md %}#access-log) for configuration details.
+
+## Stdout target inclusion
+
+By default, `saurron::access` (HTTP request events) and `saurron::audit` (update and rollback
+events) are excluded from the main stdout log output. When dedicated log files are configured for
+those targets — `http_api.access_log` and `audit_log` respectively — writing them to stdout as
+well would produce duplicate entries. The options below let you opt back in.
+
+### Include access events in stdout
+
+CLI flag
+: `--log-access-to-stdout`
+
+Environment
+: `SAURRON_LOG_ACCESS_TO_STDOUT`
+
+TOML key
+: `log_access_to_stdout`
+
+When `true`, HTTP access log events (`saurron::access`) are included in stdout in addition to any
+dedicated access log file. Default: `false`.
+
+### Include audit events in stdout
+
+CLI flag
+: `--log-audit-to-stdout`
+
+Environment
+: `SAURRON_LOG_AUDIT_TO_STDOUT`
+
+TOML key
+: `log_audit_to_stdout`
+
+When `true`, audit log events (`saurron::audit`) are included in stdout in addition to any
+dedicated audit log file. Default: `false`.

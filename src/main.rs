@@ -21,6 +21,20 @@ impl tracing_subscriber::fmt::time::FormatTime for LocalTime {
     }
 }
 
+/// Returns `true` if the event target should appear in stdout.
+///
+/// `saurron::access` and `saurron::audit` are suppressed by default because
+/// they have dedicated file appenders; users can opt back in via config.
+fn stdout_target_allowed(target: &str, include_access: bool, include_audit: bool) -> bool {
+    if target == "saurron::access" {
+        return include_access;
+    }
+    if target == "saurron::audit" {
+        return include_audit;
+    }
+    true
+}
+
 fn init_tracing(
     config: &config::Config,
 ) -> anyhow::Result<Vec<tracing_appender::non_blocking::WorkerGuard>> {
@@ -48,6 +62,9 @@ fn init_tracing(
 
     type BoxLayer = Box<dyn Layer<tracing_subscriber::Registry> + Send + Sync>;
 
+    let include_access = config.log_access_to_stdout;
+    let include_audit = config.log_audit_to_stdout;
+
     let stdout_layer: BoxLayer = match effective_format {
         cli::LogFormat::Json => tracing_subscriber::fmt::layer()
             .with_timer(LocalTime)
@@ -61,6 +78,11 @@ fn init_tracing(
         cli::LogFormat::Logfmt => tracing_logfmt::layer().boxed(),
         cli::LogFormat::Auto => unreachable!(),
     };
+    let stdout_layer: BoxLayer = stdout_layer
+        .with_filter(tracing_subscriber::filter::filter_fn(move |meta| {
+            stdout_target_allowed(meta.target(), include_access, include_audit)
+        }))
+        .boxed();
 
     let mut guards: Vec<tracing_appender::non_blocking::WorkerGuard> = Vec::new();
     let mut layers: Vec<BoxLayer> = vec![stdout_layer];
@@ -302,4 +324,36 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn access_excluded_from_stdout_by_default() {
+        assert!(!stdout_target_allowed("saurron::access", false, false));
+    }
+
+    #[test]
+    fn audit_excluded_from_stdout_by_default() {
+        assert!(!stdout_target_allowed("saurron::audit", false, false));
+    }
+
+    #[test]
+    fn access_included_in_stdout_when_opted_in() {
+        assert!(stdout_target_allowed("saurron::access", true, false));
+    }
+
+    #[test]
+    fn audit_included_in_stdout_when_opted_in() {
+        assert!(stdout_target_allowed("saurron::audit", false, true));
+    }
+
+    #[test]
+    fn other_targets_always_pass_through() {
+        assert!(stdout_target_allowed("saurron::update", false, false));
+        assert!(stdout_target_allowed("saurron", false, false));
+        assert!(stdout_target_allowed("bollard", false, false));
+    }
 }

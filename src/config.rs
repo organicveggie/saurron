@@ -11,6 +11,8 @@ pub struct Config {
     pub log_level: LogLevel,
     pub log_format: LogFormat,
     pub audit_log: Option<String>,
+    pub log_access_to_stdout: bool,
+    pub log_audit_to_stdout: bool,
     pub poll_interval: Option<String>,
     pub schedule: Option<String>,
     pub run_once: bool,
@@ -194,6 +196,8 @@ struct PartialConfig {
     log_level: Option<LogLevel>,
     log_format: Option<LogFormat>,
     audit_log: Option<String>,
+    log_access_to_stdout: Option<bool>,
+    log_audit_to_stdout: Option<bool>,
     poll_interval: Option<String>,
     schedule: Option<String>,
     run_once: Option<bool>,
@@ -523,6 +527,14 @@ impl Config {
             },
             log_format: args.log_format.or(p.log_format).unwrap_or(LogFormat::Auto),
             audit_log: args.audit_log.clone().or(p.audit_log),
+            log_access_to_stdout: args
+                .log_access_to_stdout
+                .or(p.log_access_to_stdout)
+                .unwrap_or(false),
+            log_audit_to_stdout: args
+                .log_audit_to_stdout
+                .or(p.log_audit_to_stdout)
+                .unwrap_or(false),
             poll_interval: args.interval.clone().or(p.poll_interval),
             schedule: args.schedule.clone().or(p.schedule),
             run_once: args.run_once.or(p.run_once).unwrap_or(false),
@@ -672,6 +684,8 @@ impl Config {
             registry_username = self.registry_username.as_deref().unwrap_or("<not set>"),
             registry_password = redact_opt(&self.registry_password),
             registry_credentials = self.registry_credentials.len(),
+            log_access_to_stdout = self.log_access_to_stdout,
+            log_audit_to_stdout = self.log_audit_to_stdout,
             "config: general"
         );
         info!(
@@ -790,6 +804,12 @@ log_format = "auto"
 
 # Append-only JSON audit log (optional; omit to disable)
 # audit_log = "/var/log/saurron/audit.log"
+
+# By default, HTTP access log events (saurron::access) and audit log events
+# (saurron::audit) are excluded from stdout because they are already captured
+# in their dedicated log files. Set to true to also include them in stdout.
+log_access_to_stdout = false
+log_audit_to_stdout = false
 
 # How often to check for updates, e.g. "5m", "1h", "3600"
 # Mutually exclusive with `schedule` and `run_once`.
@@ -1359,6 +1379,36 @@ mod tests {
         assert_eq!(cfg.registry_credentials[0].host, "quay.io");
         assert!(cfg.registry_credentials[0].username.is_none());
         assert!(cfg.registry_credentials[0].password.is_none());
+    }
+
+    #[test]
+    fn log_access_to_stdout_defaults_to_false() {
+        let cfg = load_cfg(&[]);
+        assert!(!cfg.log_access_to_stdout);
+    }
+
+    #[test]
+    fn log_audit_to_stdout_defaults_to_false() {
+        let cfg = load_cfg(&[]);
+        assert!(!cfg.log_audit_to_stdout);
+    }
+
+    #[test]
+    fn log_access_to_stdout_round_trips_from_toml() {
+        let path = std::env::temp_dir().join("saurron_test_log_access_stdout_config.toml");
+        std::fs::write(&path, "log_access_to_stdout = true\n").unwrap();
+        let cfg = load_cfg(&["--config", path.to_str().unwrap()]);
+        std::fs::remove_file(&path).ok();
+        assert!(cfg.log_access_to_stdout);
+    }
+
+    #[test]
+    fn log_audit_to_stdout_round_trips_from_toml() {
+        let path = std::env::temp_dir().join("saurron_test_log_audit_stdout_config.toml");
+        std::fs::write(&path, "log_audit_to_stdout = true\n").unwrap();
+        let cfg = load_cfg(&["--config", path.to_str().unwrap()]);
+        std::fs::remove_file(&path).ok();
+        assert!(cfg.log_audit_to_stdout);
     }
 
     #[test]
