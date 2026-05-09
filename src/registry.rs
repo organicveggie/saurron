@@ -22,6 +22,8 @@ pub enum RegistryError {
     ManifestNotFound(String),
     #[error("unexpected registry response: {0}")]
     UnexpectedResponse(String),
+    #[error("Docker Hub rate limited")]
+    RateLimited { retry_after: Option<u64> },
 }
 
 // ── Image reference ───────────────────────────────────────────────────────────
@@ -343,7 +345,9 @@ impl RegistryClient {
         Ok(body.tags.unwrap_or_default())
     }
 
-    async fn do_request_with_auth(
+    /// Single attempt: sends the request and, if the server responds with 401,
+    /// fetches a bearer token and retries once with it.
+    async fn send_with_auth(
         &self,
         method: reqwest::Method,
         url: &str,
@@ -382,6 +386,68 @@ impl RegistryClient {
         } else {
             Ok(resp)
         }
+    }
+
+    /// Send a registry request, retrying up to three times on Docker Hub 429
+    /// responses whose `Retry-After` value is ≤ 10 seconds.
+    async fn do_request_with_auth(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        repository: &str,
+        registry: &str,
+    ) -> Result<reqwest::Response, RegistryError> {
+        let mut attempts = 0u32;
+        loop {
+            let resp = self
+                .send_with_auth(method.clone(), url, repository, registry)
+                .await?;
+
+            if resp.status().as_u16() != 429 || registry != "registry-1.docker.io" {
+                log_rate_limit_remaining(&resp, registry);
+                return Ok(resp);
+            }
+
+            let retry_after = resp
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(parse_retry_after_secs);
+
+            match rate_limit_retry_decision(retry_after, attempts) {
+                Some(wait_secs) => {
+                    warn!(
+                        registry,
+                        retry_after_secs = wait_secs,
+                        attempt = attempts + 1,
+                        "Docker Hub rate limited; waiting before retry"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(wait_secs)).await;
+                    attempts += 1;
+                }
+                None => {
+                    warn!(
+                        registry,
+                        retry_after = ?retry_after,
+                        attempts,
+                        "Docker Hub rate limited; giving up"
+                    );
+                    return Err(RegistryError::RateLimited { retry_after });
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn test_do_request(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+        repository: &str,
+        registry: &str,
+    ) -> Result<reqwest::Response, RegistryError> {
+        self.do_request_with_auth(method, url, repository, registry)
+            .await
     }
 
     async fn fetch_bearer_token(
@@ -555,6 +621,47 @@ fn manifest_accept_header() -> String {
         "application/vnd.oci.image.index.v1+json",
     ]
     .join(", ")
+}
+
+/// Parse a `Retry-After` header value into seconds.
+/// Docker Hub always sends an integer; other formats return `None`.
+pub(crate) fn parse_retry_after_secs(value: &str) -> Option<u64> {
+    value.trim().parse::<u64>().ok()
+}
+
+/// Decide whether to wait and retry a rate-limited request.
+///
+/// Returns `Some(wait_secs)` when the caller should sleep that long then retry.
+/// Returns `None` when the caller should give up immediately.
+pub(crate) fn rate_limit_retry_decision(retry_after: Option<u64>, attempts: u32) -> Option<u64> {
+    const MAX_RETRIES: u32 = 3;
+    const MAX_RETRY_AFTER_SECS: u64 = 10;
+    if attempts >= MAX_RETRIES {
+        return None;
+    }
+    match retry_after {
+        Some(secs) if secs <= MAX_RETRY_AFTER_SECS => Some(secs),
+        _ => None,
+    }
+}
+
+/// Emit a warning when Docker Hub's rate-limit headroom drops to 5 or fewer requests.
+fn log_rate_limit_remaining(resp: &reqwest::Response, registry: &str) {
+    if registry != "registry-1.docker.io" {
+        return;
+    }
+    if let Some(remaining) = resp
+        .headers()
+        .get("x-ratelimit-remaining")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        && remaining <= 5
+    {
+        warn!(
+            registry,
+            remaining, "Docker Hub rate limit nearly exhausted"
+        );
+    }
 }
 
 async fn extract_digest(resp: reqwest::Response) -> Result<String, RegistryError> {
@@ -1212,6 +1319,255 @@ mod tests {
             matches!(err, RegistryError::AuthFailed { .. }),
             "expected AuthFailed, got {err:?}"
         );
+    }
+
+    // ── parse_retry_after_secs ────────────────────────────────────────────────
+
+    #[test]
+    fn parse_retry_after_valid_integer() {
+        assert_eq!(parse_retry_after_secs("5"), Some(5));
+        assert_eq!(parse_retry_after_secs("10"), Some(10));
+        assert_eq!(parse_retry_after_secs("120"), Some(120));
+    }
+
+    #[test]
+    fn parse_retry_after_trims_whitespace() {
+        assert_eq!(parse_retry_after_secs(" 7 "), Some(7));
+    }
+
+    #[test]
+    fn parse_retry_after_zero() {
+        assert_eq!(parse_retry_after_secs("0"), Some(0));
+    }
+
+    #[test]
+    fn parse_retry_after_empty_is_none() {
+        assert_eq!(parse_retry_after_secs(""), None);
+    }
+
+    #[test]
+    fn parse_retry_after_non_numeric_is_none() {
+        assert_eq!(parse_retry_after_secs("abc"), None);
+        assert_eq!(parse_retry_after_secs("1.5"), None);
+    }
+
+    #[test]
+    fn parse_retry_after_overflow_is_none() {
+        assert_eq!(parse_retry_after_secs("99999999999999999999"), None);
+    }
+
+    // ── rate_limit_retry_decision ─────────────────────────────────────────────
+
+    #[test]
+    fn rate_limit_retry_within_limit_returns_wait() {
+        assert_eq!(rate_limit_retry_decision(Some(5), 0), Some(5));
+    }
+
+    #[test]
+    fn rate_limit_retry_at_exactly_10s_retries() {
+        assert_eq!(rate_limit_retry_decision(Some(10), 0), Some(10));
+    }
+
+    #[test]
+    fn rate_limit_retry_11s_exceeds_limit() {
+        assert_eq!(rate_limit_retry_decision(Some(11), 0), None);
+    }
+
+    #[test]
+    fn rate_limit_retry_no_header_gives_up() {
+        assert_eq!(rate_limit_retry_decision(None, 0), None);
+    }
+
+    #[test]
+    fn rate_limit_retry_last_allowed_attempt() {
+        // attempts == 2 is the third attempt (0-indexed), which is still allowed
+        assert_eq!(rate_limit_retry_decision(Some(5), 2), Some(5));
+    }
+
+    #[test]
+    fn rate_limit_retry_at_max_retries_gives_up() {
+        assert_eq!(rate_limit_retry_decision(Some(5), 3), None);
+    }
+
+    #[test]
+    fn rate_limit_retry_past_max_retries_gives_up() {
+        assert_eq!(rate_limit_retry_decision(Some(5), 10), None);
+    }
+
+    // ── 429 retry loop (mock server) ──────────────────────────────────────────
+
+    fn make_429_response(retry_after: Option<u64>) -> axum::response::Response {
+        let mut builder =
+            axum::response::Response::builder().status(axum::http::StatusCode::TOO_MANY_REQUESTS);
+        if let Some(secs) = retry_after {
+            builder = builder.header("retry-after", secs.to_string());
+        }
+        builder.body(axum::body::Body::empty()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn rate_limit_retries_then_succeeds() {
+        use axum::{Router, routing::head};
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+
+        let call_count = Arc::new(Mutex::new(0u32));
+        let cc = Arc::clone(&call_count);
+
+        let app = Router::new().route(
+            "/v2/library/nginx/manifests/latest",
+            head(move || {
+                let cc = Arc::clone(&cc);
+                async move {
+                    let mut n = cc.lock().await;
+                    *n += 1;
+                    if *n == 1 {
+                        make_429_response(Some(0))
+                    } else {
+                        axum::response::Response::builder()
+                            .status(200)
+                            .header("docker-content-digest", "sha256:abc123")
+                            .body(axum::body::Body::empty())
+                            .unwrap()
+                    }
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![]).unwrap();
+        let url = format!("http://127.0.0.1:{port}/v2/library/nginx/manifests/latest");
+        let resp = client
+            .test_do_request(
+                reqwest::Method::HEAD,
+                &url,
+                "library/nginx",
+                "registry-1.docker.io",
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status(), 200);
+        assert_eq!(*call_count.lock().await, 2);
+    }
+
+    #[tokio::test]
+    async fn rate_limit_gives_up_when_retry_after_too_large() {
+        use axum::{Router, routing::head};
+
+        let app = Router::new().route(
+            "/v2/library/nginx/manifests/latest",
+            head(|| async { make_429_response(Some(11)) }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![]).unwrap();
+        let url = format!("http://127.0.0.1:{port}/v2/library/nginx/manifests/latest");
+        let err = client
+            .test_do_request(
+                reqwest::Method::HEAD,
+                &url,
+                "library/nginx",
+                "registry-1.docker.io",
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(
+                err,
+                RegistryError::RateLimited {
+                    retry_after: Some(11)
+                }
+            ),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limit_gives_up_when_no_retry_after_header() {
+        use axum::{Router, routing::head};
+
+        let app = Router::new().route(
+            "/v2/library/nginx/manifests/latest",
+            head(|| async { make_429_response(None) }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![]).unwrap();
+        let url = format!("http://127.0.0.1:{port}/v2/library/nginx/manifests/latest");
+        let err = client
+            .test_do_request(
+                reqwest::Method::HEAD,
+                &url,
+                "library/nginx",
+                "registry-1.docker.io",
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, RegistryError::RateLimited { retry_after: None }),
+            "unexpected error: {err:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn rate_limit_exhausts_retries_after_three_attempts() {
+        use axum::{Router, routing::head};
+        use std::sync::Arc;
+        use tokio::sync::Mutex;
+
+        let call_count = Arc::new(Mutex::new(0u32));
+        let cc = Arc::clone(&call_count);
+
+        // Always returns 429 with Retry-After: 0 so the test is instant.
+        let app = Router::new().route(
+            "/v2/library/nginx/manifests/latest",
+            head(move || {
+                let cc = Arc::clone(&cc);
+                async move {
+                    *cc.lock().await += 1;
+                    make_429_response(Some(0))
+                }
+            }),
+        );
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+
+        let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![]).unwrap();
+        let url = format!("http://127.0.0.1:{port}/v2/library/nginx/manifests/latest");
+        let err = client
+            .test_do_request(
+                reqwest::Method::HEAD,
+                &url,
+                "library/nginx",
+                "registry-1.docker.io",
+            )
+            .await
+            .unwrap_err();
+
+        assert!(
+            matches!(err, RegistryError::RateLimited { .. }),
+            "unexpected error: {err:?}"
+        );
+        // 1 initial + 3 retries = 4 total requests
+        assert_eq!(*call_count.lock().await, 4);
     }
 
     // ── proptest ──────────────────────────────────────────────────────────────

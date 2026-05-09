@@ -22,16 +22,15 @@ The `Retry-After` header specifies the number of seconds to wait until you can c
 
 * Dependent container restarts. Restart containers sharing networks or volumes with updated container.
 * Docker Hub inbound webhook format. Parse Docker Hub-specific webhook payloads.
-* Test notifications
-  * Test email
-  * Test Pushover
-  * Test MQTT
-  * Test Webhook
 * Web UI
     * Dashboard for update history
     * Manual triggers
     * Custom template previews with synthetic data
     * Manually send test notifications
+      * Email
+      * Pushover
+      * MQTT
+      * Webhook
 * Lifecycle hooks. Pre/post-check and pre/post-update shell commands inside containers; EX_TEMPFAIL exit code to signal skip-without-failure
 * Notification template preview. Validate custom templates against synthetic data without real update cycle.
 * Scope-based multi-instance support. Multiple instances on same host managing non-overlapping container sets via scope label.
@@ -41,3 +40,5 @@ The `Retry-After` header specifies the number of seconds to wait until you can c
 * Third-party authorization / authentication
 * u - only on failures
 * Use Accept-Encoding header to determine response content types for HTTP API. Current 409 and 401 responses return bare status codes with no body.
+* Make Docker Hub retry cap configurable instead of hardcoded as 3.
+* Clean up unused images
