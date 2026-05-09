@@ -28,3 +28,5 @@
 * Use Accept-Encoding header to determine response content types for HTTP API. Current 409 and 401 responses return bare status codes with no body.
 * Make Docker Hub retry cap configurable instead of hardcoded as 3.
 * Clean up unused images
+* Offer alpine based container images
+
