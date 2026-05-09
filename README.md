@@ -39,9 +39,9 @@ Inspired by [Watchtower](https://github.com/containrrr/watchtower).
 - **Prometheus metrics** - `saurron_scan_cycles_total`, `saurron_scan_cycles_skipped_total` (HTTP
     409 conflicts), `saurron_containers_scanned_total`, `saurron_containers_updated_total`, and
     `saurron_containers_failed_total`.
-- **Registry client** - Docker Registry HTTP API v2. Manifest HEAD for digest comparison. Bearer
-    token auth for public registries. SemVer tag enumeration and highest-version selection.
-    Pre-release opt-in via label. Digest-pinned image detection and skip.
+- **Registry client** - Docker Registry HTTP API v2. Manifest HEAD for digest comparison. SemVer tag enumeration and highest-version selection.
+  Pre-release opt-in via label. Digest-pinned image detection and skip.
+  Per-registry bearer token authentication for registries.
 - **Rollback manager** - Automatic rollback on non-zero exit, healthcheck failure, or startup
     timeout. Configurable timeout. Full audit log entries for rollback events.
 - **Scheduler** - Poll interval (duration or cron expression). `--run-once` mode for external
