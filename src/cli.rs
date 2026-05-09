@@ -39,6 +39,14 @@ pub struct Args {
     #[arg(long, env = "SAURRON_AUDIT_LOG", value_name = "PATH")]
     pub audit_log: Option<String>,
 
+    /// Include HTTP access log events in stdout (default: excluded from stdout)
+    #[arg(long, env = "SAURRON_LOG_ACCESS_TO_STDOUT", default_missing_value = "true", num_args = 0..=1)]
+    pub log_access_to_stdout: Option<bool>,
+
+    /// Include audit log events in stdout (default: excluded from stdout)
+    #[arg(long, env = "SAURRON_LOG_AUDIT_TO_STDOUT", default_missing_value = "true", num_args = 0..=1)]
+    pub log_audit_to_stdout: Option<bool>,
+
     // === Docker Connection ===
     /// Docker daemon socket or host URL (default: unix:///var/run/docker.sock)
     #[arg(long, env = "DOCKER_HOST", value_name = "URI")]

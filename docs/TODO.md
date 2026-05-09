@@ -41,7 +41,5 @@ The `Retry-After` header specifies the number of seconds to wait until you can c
 * Docker secrets
 * Log to file?
 * Third-party authorization / authentication
-* Stdout logging - target exclusion filter
-  * Exclude audit logging, access logging, etc.
 * u - only on failures
 * Use Accept-Encoding header to determine response content types for HTTP API. Current 409 and 401 responses return bare status codes with no body.
