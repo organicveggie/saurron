@@ -300,6 +300,66 @@ MQTT broker authentication password.
 
 This field supports Docker secret file path substitution.
 
+### MQTT TLS skip verify
+
+CLI flag
+: `--notification-mqtt-tls-skip-verify`
+
+Environment
+: `SAURRON_NOTIFICATION_MQTT_TLS_SKIP_VERIFY`
+
+TOML key
+: `notifications.mqtt.tls_skip_verify`
+
+Skip TLS certificate verification for the MQTT broker connection. Default: `false`. Use only in
+development or testing; in production, supply a CA certificate instead.
+
+### MQTT TLS CA certificate
+
+CLI flag
+: `--notification-mqtt-tls-ca-cert <path>`
+
+Environment
+: `SAURRON_NOTIFICATION_MQTT_TLS_CA_CERT`
+
+TOML key
+: `notifications.mqtt.tls_ca_cert`
+
+Path to a PEM-encoded CA certificate file used to verify the MQTT broker's TLS certificate. When
+set, the broker certificate must chain up to this CA. When omitted and TLS is active, the system
+root CA store is used.
+
+Setting this field (or `tls_cert`/`tls_key`, `tls_skip_verify`, or using a `mqtts://` / `ssl://`
+broker URL) enables TLS for the MQTT connection.
+
+### MQTT TLS client certificate
+
+CLI flag
+: `--notification-mqtt-tls-cert <path>`
+
+Environment
+: `SAURRON_NOTIFICATION_MQTT_TLS_CERT`
+
+TOML key
+: `notifications.mqtt.tls_cert`
+
+Path to a PEM-encoded client certificate file for mutual TLS (mTLS) authentication with the MQTT
+broker. Must be used together with `tls_key`.
+
+### MQTT TLS client key
+
+CLI flag
+: `--notification-mqtt-tls-key <path>`
+
+Environment
+: `SAURRON_NOTIFICATION_MQTT_TLS_KEY`
+
+TOML key
+: `notifications.mqtt.tls_key`
+
+Path to a PEM-encoded private key file for mutual TLS (mTLS) authentication with the MQTT broker.
+Must be used together with `tls_cert`.
+
 ## Pushover
 
 Sends real-time push notifications via [Pushover](https://pushover.net/) to Android, iPhone, iPad,

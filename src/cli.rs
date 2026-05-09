@@ -387,6 +387,31 @@ pub struct Args {
     )]
     pub notification_mqtt_password: Option<String>,
 
+    /// Skip TLS certificate verification for MQTT (insecure)
+    #[arg(
+        long,
+        env = "SAURRON_NOTIFICATION_MQTT_TLS_SKIP_VERIFY",
+        default_missing_value = "true",
+        num_args = 0..=1
+    )]
+    pub notification_mqtt_tls_skip_verify: Option<bool>,
+
+    /// Path to PEM CA certificate for MQTT TLS verification
+    #[arg(
+        long,
+        env = "SAURRON_NOTIFICATION_MQTT_TLS_CA_CERT",
+        value_name = "PATH"
+    )]
+    pub notification_mqtt_tls_ca_cert: Option<String>,
+
+    /// Path to PEM client certificate for MQTT mutual TLS
+    #[arg(long, env = "SAURRON_NOTIFICATION_MQTT_TLS_CERT", value_name = "PATH")]
+    pub notification_mqtt_tls_cert: Option<String>,
+
+    /// Path to PEM client key for MQTT mutual TLS
+    #[arg(long, env = "SAURRON_NOTIFICATION_MQTT_TLS_KEY", value_name = "PATH")]
+    pub notification_mqtt_tls_key: Option<String>,
+
     // === Notifications — Pushover ===
     /// Pushover application API token
     #[arg(

@@ -53,6 +53,10 @@ listed at the end.
 | `--notification-mqtt-password <password>`                    | `SAURRON_NOTIFICATION_MQTT_PASSWORD`         | `notifications.mqtt.password`           |
 | `--notification-mqtt-qos <level>`                            | `SAURRON_NOTIFICATION_MQTT_QOS`              | `notifications.mqtt.qos`                |
 | `--notification-mqtt-topic <topic>`                          | `SAURRON_NOTIFICATION_MQTT_TOPIC`            | `notifications.mqtt.topic`              |
+| `--notification-mqtt-tls-ca-cert <path>`                     | `SAURRON_NOTIFICATION_MQTT_TLS_CA_CERT`      | `notifications.mqtt.tls_ca_cert`        |
+| `--notification-mqtt-tls-cert <path>`                        | `SAURRON_NOTIFICATION_MQTT_TLS_CERT`         | `notifications.mqtt.tls_cert`           |
+| `--notification-mqtt-tls-key <path>`                         | `SAURRON_NOTIFICATION_MQTT_TLS_KEY`          | `notifications.mqtt.tls_key`            |
+| `--notification-mqtt-tls-skip-verify`                        | `SAURRON_NOTIFICATION_MQTT_TLS_SKIP_VERIFY`  | `notifications.mqtt.tls_skip_verify`    |
 | `--notification-mqtt-username <user>`                        | `SAURRON_NOTIFICATION_MQTT_USERNAME`         | `notifications.mqtt.username`           |
 | `--notification-pushover-token <token>`                      | `SAURRON_NOTIFICATION_PUSHOVER_TOKEN`        | `notifications.pushover.token`          |
 | `--notification-pushover-user-key <key>`                     | `SAURRON_NOTIFICATION_PUSHOVER_USER_KEY`     | `notifications.pushover.user_key`       |
