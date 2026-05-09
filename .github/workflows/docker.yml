@@ -17,16 +17,20 @@ jobs:
   build:
     strategy:
       matrix:
-        include:
-          - platform: linux/amd64
-            runner: ubuntu-latest
-          - platform: linux/arm64
-            runner: ubuntu-24.04-arm
+        release: [bookworm, bullseye, trixie]
+        variant: [slim, full]
+        platform: [linux/amd64, linux/arm64]
 
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.platform == 'linux/arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
 
     steps:
       - uses: actions/checkout@v6
+
+      - name: Display Runner Info
+        run: |
+          echo "Running on: ${{ matrix.platform }}"
+          echo "Dockerfile: ${{ matrix.release }}/${{ matrix.variant }}/Dockerfile"
+          uname -m
 
       # Artifact names cannot contain slashes, so convert linux/amd64 → linux-amd64.
       - name: Prepare platform pair
@@ -57,12 +61,13 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ${{ matrix.release }}/${{ matrix.variant }}/Dockerfile
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: SAURRON_BUILD_VERSION=${{ github.ref_name }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
-          cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
+          cache-from: type=gha,scope=${{ matrix.release }}-${{ matrix.variant }}-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.release }}-${{ matrix.variant }}-${{ env.PLATFORM_PAIR }}
 
       - name: Export digest
         run: |
@@ -73,7 +78,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digest-${{ env.PLATFORM_PAIR }}
+          name: digest-${{ matrix.release }}-${{ matrix.variant }}-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -113,13 +118,18 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        release: [bookworm, bullseye, trixie]
+        variant: [slim, full]
 
     steps:
       - name: Download digests
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: digest-*
+          pattern: digest-${{ matrix.release }}-${{ matrix.variant }}-*
           merge-multiple: true
 
       - name: Set up Docker Buildx
@@ -132,28 +142,84 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=edge,branch=main
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+      - name: Compute image tags
+        id: tags
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          RELEASE="${{ matrix.release }}"
+          VARIANT="${{ matrix.variant }}"
+
+          if [ "$VARIANT" = "full" ]; then
+            SUFFIX="-${RELEASE}"
+          else
+            SUFFIX="-slim-${RELEASE}"
+          fi
+
+          ARGS=""
+          PRIMARY=""
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            MAJOR=$(echo "$VERSION" | cut -d. -f1)
+            MINOR=$(echo "$VERSION" | cut -d. -f2)
+            MAJOR_MINOR="${MAJOR}.${MINOR}"
+
+            # Full version tag for all combinations, including pre-releases.
+            ARGS+=" -t ${IMAGE}:${VERSION}${SUFFIX}"
+
+            # Major.minor and major tags only for stable releases.
+            if [[ "$VERSION" != *-* ]]; then
+              ARGS+=" -t ${IMAGE}:${MAJOR_MINOR}${SUFFIX}"
+              ARGS+=" -t ${IMAGE}:${MAJOR}${SUFFIX}"
+
+              # (trixie, full) is the canonical image: also gets bare semver + latest.
+              if [ "$RELEASE" = "trixie" ] && [ "$VARIANT" = "full" ]; then
+                ARGS+=" -t ${IMAGE}:${VERSION}"
+                ARGS+=" -t ${IMAGE}:${MAJOR_MINOR}"
+                ARGS+=" -t ${IMAGE}:${MAJOR}"
+                ARGS+=" -t ${IMAGE}:latest"
+              fi
+
+              # (trixie, slim) gets slim-prefixed semver + slim.
+              if [ "$RELEASE" = "trixie" ] && [ "$VARIANT" = "slim" ]; then
+                ARGS+=" -t ${IMAGE}:slim-${VERSION}"
+                ARGS+=" -t ${IMAGE}:slim-${MAJOR_MINOR}"
+                ARGS+=" -t ${IMAGE}:slim-${MAJOR}"
+                ARGS+=" -t ${IMAGE}:slim"
+              fi
+            fi
+
+            PRIMARY="${IMAGE}:${VERSION}${SUFFIX}"
+          fi
+
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            ARGS+=" -t ${IMAGE}:edge${SUFFIX}"
+
+            # (trixie, full) also gets the bare edge tag; (trixie, slim) gets edge-slim.
+            if [ "$RELEASE" = "trixie" ]; then
+              if [ "$VARIANT" = "full" ]; then
+                ARGS+=" -t ${IMAGE}:edge"
+              else
+                ARGS+=" -t ${IMAGE}:edge-slim"
+              fi
+            fi
+
+            PRIMARY="${IMAGE}:edge${SUFFIX}"
+          fi
+
+          echo "args=${ARGS}" >> $GITHUB_OUTPUT
+          echo "primary=${PRIMARY}" >> $GITHUB_OUTPUT
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
         run: |
           docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            ${{ steps.tags.outputs.args }} \
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
 
       - name: Inspect manifest
         run: |
-          docker buildx imagetools inspect \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          docker buildx imagetools inspect ${{ steps.tags.outputs.primary }}
 
   release:
     runs-on: ubuntu-latest
