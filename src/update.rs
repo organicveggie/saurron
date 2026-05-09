@@ -551,7 +551,6 @@ pub struct UpdateEngine<'a> {
     docker: &'a docker::DockerClient,
     registry: &'a registry::RegistryClient,
     config: &'a config::Config,
-    credentials: Option<(String, String)>,
 }
 
 impl<'a> UpdateEngine<'a> {
@@ -560,15 +559,10 @@ impl<'a> UpdateEngine<'a> {
         registry: &'a registry::RegistryClient,
         config: &'a config::Config,
     ) -> Self {
-        let credentials = match (&config.registry_username, &config.registry_password) {
-            (Some(u), Some(p)) => Some((u.clone(), p.clone())),
-            _ => None,
-        };
         Self {
             docker,
             registry,
             config,
-            credentials,
         }
     }
 
@@ -814,7 +808,10 @@ impl<'a> UpdateEngine<'a> {
             info!(container = %container.name, image = %stale_info.new_image, "pulling new image");
             if let Err(e) = self
                 .docker
-                .pull_image(&stale_info.new_image, self.credentials.clone())
+                .pull_image(
+                    &stale_info.new_image,
+                    self.registry.credentials_for_image(&stale_info.new_image),
+                )
                 .await
             {
                 return UpdateResult::Failed(
@@ -1042,7 +1039,10 @@ impl<'a> UpdateEngine<'a> {
             info!(container = %container.name, image = %stale_info.new_image, "pulling new image for self-update");
             if let Err(e) = self
                 .docker
-                .pull_image(&stale_info.new_image, self.credentials.clone())
+                .pull_image(
+                    &stale_info.new_image,
+                    self.registry.credentials_for_image(&stale_info.new_image),
+                )
                 .await
             {
                 return UpdateResult::Failed(e.context(format!(

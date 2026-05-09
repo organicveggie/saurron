@@ -114,7 +114,7 @@ async fn registry_freshness_up_to_date() {
     let digest = tag_and_push("busybox:latest", &docker_ref);
     assert!(!digest.is_empty(), "no digest from push");
 
-    let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None)
+    let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![])
         .expect("failed to build registry client");
     let result = client
         .check_freshness(&api_ref, Some(&digest), false, NonSemverStrategy::Digest)
@@ -146,7 +146,7 @@ async fn registry_freshness_stale_non_semver() {
     tag_and_push("alpine:latest", &docker_ref);
 
     // check_freshness with the old (busybox) digest: registry now has alpine → Stale.
-    let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None)
+    let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![])
         .expect("failed to build registry client");
     let result = client
         .check_freshness(
@@ -178,7 +178,7 @@ async fn registry_freshness_semver_stale() {
     tag_and_push("busybox:latest", &v100_docker);
     tag_and_push("busybox:latest", &v110_docker);
 
-    let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None)
+    let client = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![])
         .expect("failed to build registry client");
     let result = client
         .check_freshness(&v100_api, None, false, NonSemverStrategy::Digest)
@@ -328,8 +328,8 @@ async fn update_cycle_updates_stale_container() {
 
     // 3. Build engine components.
     let docker = DockerClient::connect(&default_docker_config()).expect("docker connect failed");
-    let registry =
-        RegistryClient::new(HeadWarnStrategy::Auto, "test", None).expect("registry client failed");
+    let registry = RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![])
+        .expect("registry client failed");
     // --no-pull: skip the bollard pull call so the update succeeds even when the
     // Docker daemon can't reach api_host:PORT as an HTTP registry.  The v1.1.0
     // image is already local (tagged above), so the restart succeeds anyway.
@@ -444,7 +444,7 @@ async fn post_update_via_http_records_scan_cycle_metric() {
     .0;
 
     let registry =
-        RegistryClient::new(HeadWarnStrategy::Auto, "test", None).expect("registry client");
+        RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![]).expect("registry client");
     let selector = selector_from_config(&config);
     let state = Arc::new(AppStateInner {
         docker,
@@ -583,7 +583,7 @@ async fn post_update_via_http_dispatches_webhook_on_update() {
     .0;
 
     let registry =
-        RegistryClient::new(HeadWarnStrategy::Auto, "test", None).expect("registry client");
+        RegistryClient::new(HeadWarnStrategy::Auto, "test", None, vec![]).expect("registry client");
     let selector = selector_from_config(&config);
     let state = Arc::new(AppStateInner {
         docker,

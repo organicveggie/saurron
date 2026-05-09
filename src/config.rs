@@ -29,6 +29,7 @@ pub struct Config {
     pub head_warn_strategy: HeadWarnStrategy,
     pub registry_username: Option<String>,
     pub registry_password: Option<String>,
+    pub registry_credentials: Vec<RegistryCredential>,
     pub http_api: HttpApiConfig,
     pub notifications: NotificationsConfig,
 }
@@ -108,6 +109,19 @@ pub struct MqttConfig {
 pub struct PushoverConfig {
     pub token: String,
     pub user_key: String,
+}
+
+/// Per-registry authentication credentials.
+///
+/// Overrides the global `registry_username`/`registry_password` for the named
+/// registry. An entry with no `username`/`password` forces anonymous access for
+/// that registry even when global credentials are configured. `"docker.io"` is
+/// accepted as an alias for `"registry-1.docker.io"`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct RegistryCredential {
+    pub host: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
 }
 
 /// Outcome of the config-file read step inside [`Config::load`].
@@ -196,6 +210,7 @@ struct PartialConfig {
     head_warn_strategy: Option<HeadWarnStrategy>,
     registry_username: Option<String>,
     registry_password: Option<String>,
+    registry_credentials: Option<Vec<RegistryCredential>>,
     docker: Option<PartialDockerConfig>,
     rollback: Option<PartialRollbackConfig>,
     http_api: Option<PartialHttpApiConfig>,
@@ -563,6 +578,7 @@ impl Config {
                 .unwrap_or(HeadWarnStrategy::Auto),
             registry_username: args.registry_username.clone().or(p.registry_username),
             registry_password: args.registry_password.clone().or(p.registry_password),
+            registry_credentials: p.registry_credentials.unwrap_or_default(),
             http_api: HttpApiConfig {
                 update: args.http_api_update.or(ph.update).unwrap_or(false),
                 metrics: args.http_api_metrics.or(ph.metrics).unwrap_or(false),
@@ -655,6 +671,7 @@ impl Config {
             head_warn_strategy = ?self.head_warn_strategy,
             registry_username = self.registry_username.as_deref().unwrap_or("<not set>"),
             registry_password = redact_opt(&self.registry_password),
+            registry_credentials = self.registry_credentials.len(),
             "config: general"
         );
         info!(
@@ -785,9 +802,29 @@ log_format = "auto"
 # Exit after a single update cycle instead of running continuously.
 run_once = false
 
-# Registry credentials (or path to a Docker secret file)
+# Global registry credentials (or path to a Docker secret file).
+# Applied to all registries that have no per-registry entry below.
 # registry_username = ""
 # registry_password = ""
+
+# Per-registry credentials. Overrides the global credentials for the named
+# registry. An entry with no username/password forces anonymous access for that
+# registry even when global credentials are set. "docker.io" is accepted as an
+# alias for "registry-1.docker.io".
+#
+# [[registry_credentials]]
+# host = "ghcr.io"
+# username = "myuser"
+# password = "mytoken"
+#
+# [[registry_credentials]]
+# host = "docker.io"
+# username = "hubuser"
+# password = "hubpass"
+#
+# [[registry_credentials]]
+# host = "quay.io"
+# (no username/password = explicit anonymous, overrides global credentials)
 
 # How to handle a failed manifest HEAD request:
 #   auto   — warn on unexpected errors, silent on auth failures
@@ -1273,6 +1310,55 @@ mod tests {
             cfg.http_api.access_log,
             Some("/var/log/saurron/access.log".to_string())
         );
+    }
+
+    #[test]
+    fn registry_credentials_round_trips_from_toml() {
+        let path = std::env::temp_dir().join("saurron_test_registry_creds_config.toml");
+        std::fs::write(
+            &path,
+            "[[registry_credentials]]\n\
+             host = \"ghcr.io\"\n\
+             username = \"myuser\"\n\
+             password = \"mytoken\"\n\
+             \n\
+             [[registry_credentials]]\n\
+             host = \"docker.io\"\n\
+             username = \"hubuser\"\n\
+             password = \"hubpass\"\n",
+        )
+        .unwrap();
+        let cfg = load_cfg(&["--config", path.to_str().unwrap()]);
+        std::fs::remove_file(&path).ok();
+        assert_eq!(cfg.registry_credentials.len(), 2);
+        assert_eq!(cfg.registry_credentials[0].host, "ghcr.io");
+        assert_eq!(
+            cfg.registry_credentials[0].username,
+            Some("myuser".to_string())
+        );
+        assert_eq!(
+            cfg.registry_credentials[0].password,
+            Some("mytoken".to_string())
+        );
+        assert_eq!(cfg.registry_credentials[1].host, "docker.io");
+    }
+
+    #[test]
+    fn registry_credentials_absent_gives_empty_vec() {
+        let cfg = load_cfg(&[]);
+        assert!(cfg.registry_credentials.is_empty());
+    }
+
+    #[test]
+    fn registry_credentials_explicit_anonymous_entry() {
+        let path = std::env::temp_dir().join("saurron_test_registry_anon_config.toml");
+        std::fs::write(&path, "[[registry_credentials]]\nhost = \"quay.io\"\n").unwrap();
+        let cfg = load_cfg(&["--config", path.to_str().unwrap()]);
+        std::fs::remove_file(&path).ok();
+        assert_eq!(cfg.registry_credentials.len(), 1);
+        assert_eq!(cfg.registry_credentials[0].host, "quay.io");
+        assert!(cfg.registry_credentials[0].username.is_none());
+        assert!(cfg.registry_credentials[0].password.is_none());
     }
 
     #[test]
