@@ -56,21 +56,160 @@ pub fn parse_webhook_headers(s: &str) -> Vec<(String, String)> {
 
 // ── MQTT helper ───────────────────────────────────────────────────────────────
 
-/// Parse `tcp://host:port`, `mqtt://host:port`, or bare `host:port` / `host`.
-pub(crate) fn parse_mqtt_broker(broker: &str) -> Result<(String, u16)> {
-    let stripped = broker
-        .strip_prefix("tcp://")
-        .or_else(|| broker.strip_prefix("mqtt://"))
-        .unwrap_or(broker);
+/// Parse the broker URL into `(host, port, scheme_implies_tls)`.
+///
+/// Supported schemes: `tcp://`, `mqtt://` (plain), `mqtts://`, `ssl://` (TLS).
+/// When no port is in the URL the default is 1883 for plain and 8883 for TLS schemes.
+pub(crate) fn parse_mqtt_broker(broker: &str) -> Result<(String, u16, bool)> {
+    let (stripped, scheme_tls, default_port) = if let Some(rest) = broker
+        .strip_prefix("mqtts://")
+        .or_else(|| broker.strip_prefix("ssl://"))
+    {
+        (rest, true, 8883u16)
+    } else {
+        let rest = broker
+            .strip_prefix("tcp://")
+            .or_else(|| broker.strip_prefix("mqtt://"))
+            .unwrap_or(broker);
+        (rest, false, 1883u16)
+    };
 
     if let Some((host, port_str)) = stripped.rsplit_once(':') {
         let port = port_str
             .parse::<u16>()
             .context("invalid MQTT broker port")?;
-        Ok((host.to_string(), port))
+        Ok((host.to_string(), port, scheme_tls))
     } else {
-        Ok((stripped.to_string(), 1883))
+        Ok((stripped.to_string(), default_port, scheme_tls))
     }
+}
+
+/// Returns true when any TLS indicator is present: a TLS URL scheme, skip-verify
+/// flag, or explicit certificate/key paths.
+pub(crate) fn use_mqtt_tls(scheme_tls: bool, cfg: &MqttConfig) -> bool {
+    scheme_tls
+        || cfg.tls_skip_verify
+        || cfg.tls_ca_cert.is_some()
+        || cfg.tls_cert.is_some()
+        || cfg.tls_key.is_some()
+}
+
+/// Build a rustls `ClientConfig` for MQTT TLS.
+///
+/// Priority:
+/// 1. `tls_skip_verify` → accept any certificate (insecure).
+/// 2. `tls_ca_cert` → verify against the supplied PEM CA file; optionally add
+///    client certificate/key for mutual TLS.
+/// 3. Neither → verify using system root CAs.
+fn build_mqtt_tls_config(cfg: &MqttConfig) -> Result<rumqttc::tokio_rustls::rustls::ClientConfig> {
+    use rumqttc::tokio_rustls::rustls::{
+        ClientConfig, RootCertStore,
+        client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
+        pki_types::{CertificateDer, ServerName, UnixTime},
+    };
+    use std::sync::Arc;
+
+    if cfg.tls_skip_verify {
+        #[derive(Debug)]
+        struct AcceptAnyServerCert;
+
+        impl ServerCertVerifier for AcceptAnyServerCert {
+            fn verify_server_cert(
+                &self,
+                _end_entity: &CertificateDer<'_>,
+                _intermediates: &[CertificateDer<'_>],
+                _server_name: &ServerName<'_>,
+                _ocsp_response: &[u8],
+                _now: UnixTime,
+            ) -> std::result::Result<ServerCertVerified, rumqttc::tokio_rustls::rustls::Error>
+            {
+                Ok(ServerCertVerified::assertion())
+            }
+
+            fn verify_tls12_signature(
+                &self,
+                _message: &[u8],
+                _cert: &CertificateDer<'_>,
+                _dss: &rumqttc::tokio_rustls::rustls::DigitallySignedStruct,
+            ) -> std::result::Result<HandshakeSignatureValid, rumqttc::tokio_rustls::rustls::Error>
+            {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+
+            fn verify_tls13_signature(
+                &self,
+                _message: &[u8],
+                _cert: &CertificateDer<'_>,
+                _dss: &rumqttc::tokio_rustls::rustls::DigitallySignedStruct,
+            ) -> std::result::Result<HandshakeSignatureValid, rumqttc::tokio_rustls::rustls::Error>
+            {
+                Ok(HandshakeSignatureValid::assertion())
+            }
+
+            fn supported_verify_schemes(
+                &self,
+            ) -> Vec<rumqttc::tokio_rustls::rustls::SignatureScheme> {
+                rumqttc::tokio_rustls::rustls::crypto::ring::default_provider()
+                    .signature_verification_algorithms
+                    .supported_schemes()
+            }
+        }
+
+        return Ok(ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(AcceptAnyServerCert))
+            .with_no_client_auth());
+    }
+
+    let root_cert_store = if let Some(ref ca_path) = cfg.tls_ca_cert {
+        let pem = std::fs::read(ca_path)
+            .with_context(|| format!("failed to read MQTT TLS CA cert: {ca_path}"))?;
+        let mut store = RootCertStore::empty();
+        let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut pem.as_slice())
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("failed to parse MQTT TLS CA cert PEM")?;
+        store.add_parsable_certificates(certs);
+        if store.is_empty() {
+            anyhow::bail!("no valid certificates found in MQTT TLS CA cert file: {ca_path}");
+        }
+        store
+    } else {
+        let mut store = RootCertStore::empty();
+        let native_certs = rustls_native_certs::load_native_certs();
+        for err in &native_certs.errors {
+            tracing::warn!(error = %err, "failed to load a system root certificate");
+        }
+        store.add_parsable_certificates(native_certs.certs);
+        store
+    };
+
+    let builder = ClientConfig::builder().with_root_certificates(root_cert_store);
+
+    let client_config = if let (Some(cert_path), Some(key_path)) = (&cfg.tls_cert, &cfg.tls_key) {
+        let cert_pem = std::fs::read(cert_path)
+            .with_context(|| format!("failed to read MQTT TLS client cert: {cert_path}"))?;
+        let key_pem = std::fs::read(key_path)
+            .with_context(|| format!("failed to read MQTT TLS client key: {key_path}"))?;
+
+        let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut cert_pem.as_slice())
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .context("failed to parse MQTT TLS client cert PEM")?;
+        if certs.is_empty() {
+            anyhow::bail!("no valid certificate found in MQTT TLS client cert file: {cert_path}");
+        }
+
+        let key = rustls_pemfile::private_key(&mut key_pem.as_slice())
+            .context("failed to parse MQTT TLS client key PEM")?
+            .with_context(|| format!("no private key found in MQTT TLS key file: {key_path}"))?;
+
+        builder
+            .with_client_auth_cert(certs, key)
+            .context("failed to configure MQTT TLS client authentication")?
+    } else {
+        builder.with_no_client_auth()
+    };
+
+    Ok(client_config)
 }
 
 // ── Dispatch ──────────────────────────────────────────────────────────────────
@@ -245,9 +384,9 @@ pub async fn send_email(cfg: &EmailConfig, body: &str) -> Result<()> {
 }
 
 pub async fn send_mqtt(cfg: &MqttConfig, body: &str) -> Result<()> {
-    use rumqttc::{AsyncClient, MqttOptions, QoS};
+    use rumqttc::{AsyncClient, MqttOptions, QoS, Transport};
 
-    let (host, port) = parse_mqtt_broker(&cfg.broker)?;
+    let (host, port, scheme_tls) = parse_mqtt_broker(&cfg.broker)?;
 
     let qos = match cfg.qos {
         1 => QoS::AtLeastOnce,
@@ -269,6 +408,11 @@ pub async fn send_mqtt(cfg: &MqttConfig, body: &str) -> Result<()> {
     opts.set_clean_start(true);
     if let (Some(u), Some(p)) = (&cfg.username, &cfg.password) {
         opts.set_credentials(u.as_str(), p.as_bytes().to_vec());
+    }
+    if use_mqtt_tls(scheme_tls, cfg) {
+        let tls_config =
+            build_mqtt_tls_config(cfg).context("failed to build MQTT TLS configuration")?;
+        opts.set_transport(Transport::tls_with_config(tls_config.into()));
     }
 
     let (client, mut eventloop) = AsyncClient::builder(opts).capacity(16).build_async();
@@ -468,30 +612,113 @@ mod tests {
 
     #[test]
     fn parse_broker_tcp_scheme() {
-        let (host, port) = parse_mqtt_broker("tcp://broker.example.com:1883").unwrap();
+        let (host, port, tls) = parse_mqtt_broker("tcp://broker.example.com:1883").unwrap();
         assert_eq!(host, "broker.example.com");
         assert_eq!(port, 1883);
+        assert!(!tls);
     }
 
     #[test]
     fn parse_broker_mqtt_scheme() {
-        let (host, port) = parse_mqtt_broker("mqtt://localhost:1884").unwrap();
+        let (host, port, tls) = parse_mqtt_broker("mqtt://localhost:1884").unwrap();
         assert_eq!(host, "localhost");
         assert_eq!(port, 1884);
+        assert!(!tls);
     }
 
     #[test]
     fn parse_broker_no_scheme_with_port() {
-        let (host, port) = parse_mqtt_broker("host.local:9000").unwrap();
+        let (host, port, tls) = parse_mqtt_broker("host.local:9000").unwrap();
         assert_eq!(host, "host.local");
         assert_eq!(port, 9000);
+        assert!(!tls);
     }
 
     #[test]
     fn parse_broker_no_port_defaults_to_1883() {
-        let (host, port) = parse_mqtt_broker("broker.example.com").unwrap();
+        let (host, port, tls) = parse_mqtt_broker("broker.example.com").unwrap();
         assert_eq!(host, "broker.example.com");
         assert_eq!(port, 1883);
+        assert!(!tls);
+    }
+
+    #[test]
+    fn parse_broker_mqtts_scheme_implies_tls_and_default_port_8883() {
+        let (host, port, tls) = parse_mqtt_broker("mqtts://broker.example.com").unwrap();
+        assert_eq!(host, "broker.example.com");
+        assert_eq!(port, 8883);
+        assert!(tls);
+    }
+
+    #[test]
+    fn parse_broker_ssl_scheme_implies_tls_and_default_port_8883() {
+        let (host, port, tls) = parse_mqtt_broker("ssl://broker.example.com").unwrap();
+        assert_eq!(host, "broker.example.com");
+        assert_eq!(port, 8883);
+        assert!(tls);
+    }
+
+    #[test]
+    fn parse_broker_mqtts_scheme_with_explicit_port() {
+        let (host, port, tls) = parse_mqtt_broker("mqtts://broker.example.com:9883").unwrap();
+        assert_eq!(host, "broker.example.com");
+        assert_eq!(port, 9883);
+        assert!(tls);
+    }
+
+    // ── use_mqtt_tls ──────────────────────────────────────────────────────────
+
+    fn minimal_mqtt_cfg() -> MqttConfig {
+        MqttConfig {
+            broker: "localhost:1883".to_string(),
+            topic: "test".to_string(),
+            qos: 0,
+            client_id: None,
+            username: None,
+            password: None,
+            tls_skip_verify: false,
+            tls_ca_cert: None,
+            tls_cert: None,
+            tls_key: None,
+        }
+    }
+
+    #[test]
+    fn use_mqtt_tls_false_when_no_indicators() {
+        assert!(!use_mqtt_tls(false, &minimal_mqtt_cfg()));
+    }
+
+    #[test]
+    fn use_mqtt_tls_true_when_scheme_implies_tls() {
+        assert!(use_mqtt_tls(true, &minimal_mqtt_cfg()));
+    }
+
+    #[test]
+    fn use_mqtt_tls_true_when_skip_verify() {
+        let mut cfg = minimal_mqtt_cfg();
+        cfg.tls_skip_verify = true;
+        assert!(use_mqtt_tls(false, &cfg));
+    }
+
+    #[test]
+    fn use_mqtt_tls_true_when_ca_cert_set() {
+        let mut cfg = minimal_mqtt_cfg();
+        cfg.tls_ca_cert = Some("/etc/ssl/ca.pem".to_string());
+        assert!(use_mqtt_tls(false, &cfg));
+    }
+
+    #[test]
+    fn use_mqtt_tls_true_when_client_cert_set() {
+        let mut cfg = minimal_mqtt_cfg();
+        cfg.tls_cert = Some("/etc/ssl/client.pem".to_string());
+        assert!(use_mqtt_tls(false, &cfg));
+    }
+
+    #[test]
+    fn use_mqtt_tls_true_when_client_key_set() {
+        let mut cfg = minimal_mqtt_cfg();
+        cfg.tls_key = Some("/etc/ssl/client.key".to_string());
+        assert!(use_mqtt_tls(false, &cfg));
     }
 
     // ── dispatch (no network) ─────────────────────────────────────────────────

@@ -105,6 +105,13 @@ pub struct MqttConfig {
     pub client_id: Option<String>,
     pub username: Option<String>,
     pub password: Option<String>,
+    pub tls_skip_verify: bool,
+    /// Path to a PEM CA certificate file for verifying the broker's certificate.
+    pub tls_ca_cert: Option<String>,
+    /// Path to a PEM client certificate file for mutual TLS authentication.
+    pub tls_cert: Option<String>,
+    /// Path to a PEM client key file for mutual TLS authentication.
+    pub tls_key: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -290,6 +297,10 @@ struct PartialMqttConfig {
     client_id: Option<String>,
     username: Option<String>,
     password: Option<String>,
+    tls_skip_verify: Option<bool>,
+    tls_ca_cert: Option<String>,
+    tls_cert: Option<String>,
+    tls_key: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -494,6 +505,22 @@ impl Config {
                         .notification_mqtt_password
                         .clone()
                         .or_else(|| pm.and_then(|m| m.password.clone())),
+                    tls_skip_verify: args
+                        .notification_mqtt_tls_skip_verify
+                        .or_else(|| pm.and_then(|m| m.tls_skip_verify))
+                        .unwrap_or(false),
+                    tls_ca_cert: args
+                        .notification_mqtt_tls_ca_cert
+                        .clone()
+                        .or_else(|| pm.and_then(|m| m.tls_ca_cert.clone())),
+                    tls_cert: args
+                        .notification_mqtt_tls_cert
+                        .clone()
+                        .or_else(|| pm.and_then(|m| m.tls_cert.clone())),
+                    tls_key: args
+                        .notification_mqtt_tls_key
+                        .clone()
+                        .or_else(|| pm.and_then(|m| m.tls_key.clone())),
                 }),
                 _ => None,
             }
@@ -769,6 +796,10 @@ impl Config {
                 client_id = m.client_id.as_deref().unwrap_or("<not set>"),
                 username = m.username.as_deref().unwrap_or("<not set>"),
                 password = redact_opt(&m.password),
+                tls_skip_verify = m.tls_skip_verify,
+                tls_ca_cert = m.tls_ca_cert.as_deref().unwrap_or("<not set>"),
+                tls_cert = m.tls_cert.as_deref().unwrap_or("<not set>"),
+                tls_key = m.tls_key.as_deref().unwrap_or("<not set>"),
                 "config: notifications.mqtt"
             );
         } else {
@@ -952,7 +983,9 @@ port = 587
 tls_skip_verify = false
 
 [notifications.mqtt]
-# MQTT broker address, e.g. "tcp://broker.example.com:1883" (required to enable MQTT).
+# MQTT broker address (required to enable MQTT). Supported schemes:
+#   tcp://  or  mqtt://  — plain TCP (default)
+#   mqtts:// or ssl://   — TLS (requires explicit TLS transport configuration below)
 # broker = ""
 # Topic to publish update reports to (required).
 # topic = ""
@@ -963,6 +996,16 @@ qos = 0
 # Broker credentials (optional).
 # username = ""
 # password = ""
+# TLS settings (all optional; TLS is enabled when any TLS field is set or the
+# broker scheme is mqtts:// or ssl://).
+# Skip TLS certificate verification (insecure; useful for self-signed certs).
+# tls_skip_verify = false
+# Path to a PEM CA certificate for verifying the broker's certificate.
+# tls_ca_cert = ""
+# Path to a PEM client certificate for mutual TLS authentication.
+# tls_cert = ""
+# Path to a PEM client key for mutual TLS authentication.
+# tls_key = ""
 
 [notifications.pushover]
 # Pushover application token (required to enable Pushover notifications).
