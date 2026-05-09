@@ -22,7 +22,6 @@ The `Retry-After` header specifies the number of seconds to wait until you can c
 
 ## Miscellaneous
 
-* Per-registry credential scoping. Separate username/password per registry; Docker config file credential source.
 * Dependent container restarts. Restart containers sharing networks or volumes with updated container.
 * Docker Hub inbound webhook format. Parse Docker Hub-specific webhook payloads.
 * Test notifications
@@ -30,7 +29,7 @@ The `Retry-After` header specifies the number of seconds to wait until you can c
   * Test Pushover
   * Test MQTT
   * Test Webhook
-* Web UIu
+* Web UI
     * Dashboard for update history
     * Manual triggers
     * Custom template previews with synthetic data
