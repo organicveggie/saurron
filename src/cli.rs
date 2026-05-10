@@ -297,6 +297,10 @@ pub struct Args {
     #[arg(long, env = "SAURRON_NOTIFICATION_TEMPLATE", value_name = "TEMPLATE")]
     pub notification_template: Option<String>,
 
+    /// Send a notification after every cycle regardless of outcome (default: disabled)
+    #[arg(long, env = "SAURRON_NOTIFY_ON_EVERY_CYCLE", default_missing_value = "true", num_args = 0..=1)]
+    pub notify_on_every_cycle: Option<bool>,
+
     // === Notifications — Webhook ===
     /// URL to POST notification payloads to
     #[arg(long, env = "SAURRON_WEBHOOK_URL", value_name = "URL")]

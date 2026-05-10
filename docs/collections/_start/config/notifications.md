@@ -93,6 +93,24 @@ Containers:
 This field supports Docker secret file path substitution — if the value is a path to a readable
 file, it is replaced with the file contents at startup.
 
+### Notify on every cycle
+
+CLI flag
+: `--notify-on-every-cycle`
+
+Environment
+: `SAURRON_NOTIFY_ON_EVERY_CYCLE`
+
+TOML key
+: `notifications.general.notify_on_every_cycle`
+
+When enabled, a notification is sent after every update cycle regardless of outcome — including
+cycles where all containers were already up to date. Default: `false`.
+
+By default, Saurron only dispatches notifications when a cycle produces at least one update,
+failure, or rollback. This option is useful for operators who want a periodic heartbeat from
+Saurron to confirm it is running and checking containers, even when nothing has changed.
+
 ## Email
 
 Sends notifications via SMTP. Uses STARTTLS by default.

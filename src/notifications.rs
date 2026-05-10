@@ -218,7 +218,7 @@ fn build_mqtt_tls_config(cfg: &MqttConfig) -> Result<rumqttc::tokio_rustls::rust
 /// interesting results (any update, failure, or rollback).
 /// Errors from individual targets are logged; other targets still run.
 pub async fn dispatch(config: &NotificationsConfig, report: &SessionReport) {
-    if !should_notify(report) {
+    if !should_notify(report) && !config.general.notify_on_every_cycle {
         return;
     }
 
@@ -731,6 +731,7 @@ mod tests {
             general: GeneralNotifConfig {
                 delay: "0s".to_string(),
                 template: None,
+                notify_on_every_cycle: false,
             },
             webhook: None,
             email: None,
@@ -753,6 +754,7 @@ mod tests {
             general: GeneralNotifConfig {
                 delay: "0s".to_string(),
                 template: None,
+                notify_on_every_cycle: false,
             },
             webhook: None,
             email: None,
@@ -771,6 +773,7 @@ mod tests {
             general: GeneralNotifConfig {
                 delay: "0s".to_string(),
                 template: Some("{{ unclosed".to_string()),
+                notify_on_every_cycle: false,
             },
             webhook: None,
             email: None,
@@ -790,6 +793,7 @@ mod tests {
             general: GeneralNotifConfig {
                 delay: "0s".to_string(),
                 template: None,
+                notify_on_every_cycle: false,
             },
             webhook: Some(WebhookConfig {
                 url: "http://127.0.0.1:1/nonexistent".to_string(),
@@ -801,6 +805,54 @@ mod tests {
             pushover: None,
         };
         dispatch(&config, &report_with_updates()).await; // must not panic
+    }
+
+    #[tokio::test]
+    async fn dispatch_fires_when_notify_on_every_cycle_and_all_up_to_date() {
+        use crate::config::{GeneralNotifConfig, NotificationsConfig};
+
+        let config = NotificationsConfig {
+            general: GeneralNotifConfig {
+                delay: "0s".to_string(),
+                template: None,
+                notify_on_every_cycle: true,
+            },
+            webhook: None,
+            email: None,
+            mqtt: None,
+            pushover: None,
+        };
+        // All-up-to-date report: should_notify returns false, but notify_on_every_cycle
+        // overrides the early return. No targets configured, so dispatch completes cleanly.
+        let report = SessionReport {
+            up_to_date: 5,
+            ..Default::default()
+        };
+        dispatch(&config, &report).await; // must not return early; must not panic
+    }
+
+    #[tokio::test]
+    async fn dispatch_skips_when_flag_false_and_no_interesting_results() {
+        use crate::config::{GeneralNotifConfig, NotificationsConfig};
+
+        // Same as the all-up-to-date case but with notify_on_every_cycle: false.
+        // Verifies the default early-return behaviour is preserved.
+        let config = NotificationsConfig {
+            general: GeneralNotifConfig {
+                delay: "0s".to_string(),
+                template: None,
+                notify_on_every_cycle: false,
+            },
+            webhook: None,
+            email: None,
+            mqtt: None,
+            pushover: None,
+        };
+        let report = SessionReport {
+            up_to_date: 5,
+            ..Default::default()
+        };
+        dispatch(&config, &report).await; // returns early; must not panic
     }
 
     // ── send_webhook (local server) ───────────────────────────────────────────
