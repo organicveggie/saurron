@@ -133,7 +133,7 @@ When Saurron detects its own container is stale, it: pulls new image → renames
 ### Rust
 
 - Run `rustfmt --edition 2024` on Rust files after modifying
-- Keep code coverage at or above 40% for new code
+- Keep code coverage at or above 50%
 
 ### Markdown
 

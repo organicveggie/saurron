@@ -77,6 +77,7 @@ pub struct NotificationsConfig {
 pub struct GeneralNotifConfig {
     pub delay: String,
     pub template: Option<String>,
+    pub notify_on_every_cycle: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -269,6 +270,7 @@ struct PartialNotificationsConfig {
 struct PartialGeneralNotifConfig {
     delay: Option<String>,
     template: Option<String>,
+    notify_on_every_cycle: Option<bool>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -637,6 +639,10 @@ impl Config {
                         .or(pg.delay)
                         .unwrap_or_else(|| "0s".to_string()),
                     template: args.notification_template.clone().or(pg.template),
+                    notify_on_every_cycle: args
+                        .notify_on_every_cycle
+                        .or(pg.notify_on_every_cycle)
+                        .unwrap_or(false),
                 },
                 webhook,
                 email,
@@ -759,6 +765,7 @@ impl Config {
         info!(
             delay = %self.notifications.general.delay,
             template_is_set = self.notifications.general.template.is_some(),
+            notify_on_every_cycle = self.notifications.general.notify_on_every_cycle,
             "config: notifications"
         );
         if let Some(ref wh) = self.notifications.webhook {
@@ -958,6 +965,8 @@ metrics_no_auth = false
 delay = "0s"
 # Path to a custom MiniJinja notification template file (optional).
 # template = ""
+# Send a notification after every cycle regardless of outcome (default: false).
+# notify_on_every_cycle = false
 
 [notifications.webhook]
 # HTTP endpoint to POST update reports to (enables webhook notifications).

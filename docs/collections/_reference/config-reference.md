@@ -61,6 +61,7 @@ listed at the end.
 | `--notification-pushover-token <token>`                      | `SAURRON_NOTIFICATION_PUSHOVER_TOKEN`        | `notifications.pushover.token`          |
 | `--notification-pushover-user-key <key>`                     | `SAURRON_NOTIFICATION_PUSHOVER_USER_KEY`     | `notifications.pushover.user_key`       |
 | `--notification-template <template>`                         | `SAURRON_NOTIFICATION_TEMPLATE`              | `notifications.general.template`        |
+| `--notify-on-every-cycle`                                    | `SAURRON_NOTIFY_ON_EVERY_CYCLE`              | `notifications.general.notify_on_every_cycle` |
 | `--registry-password <password>`                             | `SAURRON_REGISTRY_PASSWORD`                  | `registry_password`                     |
 | `--registry-username <username>`                             | `SAURRON_REGISTRY_USERNAME`                  | `registry_username`                     |
 | `--revive-stopped`                                           | `SAURRON_REVIVE_STOPPED`                     | `revive_stopped`                        |
