@@ -1,0 +1,203 @@
+---
+layout: page
+title: Sample Config
+---
+
+<!-- prettier-ignore-start -->
+# Sample Config
+{: .no_toc }
+
+<!-- prettier-ignore-end -->
+
+```toml
+# Saurron configuration file
+# Generate a fresh copy with: saurron --generate-config [FILE]
+
+# Log verbosity: trace, debug, info, warn, error
+log_level = "info"
+
+# Log format: auto (detects TTY → pretty, pipe → json), json, logfmt, pretty
+log_format = "auto"
+
+# Append-only JSON audit log (optional; omit to disable)
+# audit_log = "/var/log/saurron/audit.log"
+
+# By default, HTTP access log events (saurron::access) and audit log events
+# (saurron::audit) are excluded from stdout because they are already captured
+# in their dedicated log files. Set to true to also include them in stdout.
+log_access_to_stdout = false
+log_audit_to_stdout = false
+
+# How often to check for updates, e.g. "5m", "1h", "3600"
+# Mutually exclusive with `schedule` and `run_once`.
+# poll_interval = "24h"
+
+# Cron expression for update schedule, e.g. "0 3 * * *"
+# Mutually exclusive with `poll_interval` and `run_once`.
+# schedule = ""
+
+# Exit after a single update cycle instead of running continuously.
+run_once = false
+
+# Global registry credentials (or path to a Docker secret file).
+# Applied to all registries that have no per-registry entry below.
+# registry_username = ""
+# registry_password = ""
+
+# Per-registry credentials. Overrides the global credentials for the named
+# registry. An entry with no username/password forces anonymous access for that
+# registry even when global credentials are set. "docker.io" is accepted as an
+# alias for "registry-1.docker.io".
+#
+# [[registry_credentials]]
+# host = "ghcr.io"
+# username = "myuser"
+# password = "mytoken"
+#
+# [[registry_credentials]]
+# host = "docker.io"
+# username = "hubuser"
+# password = "hubpass"
+#
+# [[registry_credentials]]
+# host = "quay.io"
+# (no username/password = explicit anonymous, overrides global credentials)
+
+# How to handle a failed manifest HEAD request:
+#   auto   — warn on unexpected errors, silent on auth failures
+#   always — always warn
+#   never  — always log at debug level
+head_warn_strategy = "auto"
+
+# ── Container selection ─────────────────────────────────────────────────────
+
+# Opt-in mode: only update containers with the saurron.enable=true label.
+label_enable = false
+
+# Containers to always exclude from updates (TOML array of names).
+disable_containers = []
+
+# If non-empty, only update containers in this allow-list.
+containers = []
+
+# Include containers in the "restarting" state.
+include_restarting = false
+
+# When true, global settings take precedence over per-container saurron.* labels.
+global_takes_precedence = false
+
+# Also start stopped (exited/created) containers when a newer image is found.
+revive_stopped = false
+
+# ── Update behaviour ────────────────────────────────────────────────────────
+
+# Detect stale images but never restart containers.
+monitor_only = false
+
+# Skip pulling the new image; use whatever is already cached locally.
+no_pull = false
+
+# Remove the old image after a successful update.
+cleanup = false
+
+# How long to wait for a container to stop gracefully before sending SIGKILL.
+stop_timeout = "10s"
+
+[docker]
+# Docker daemon socket or TCP address
+host = "unix:///var/run/docker.sock"
+# Verify TLS certificates for TCP connections
+tls_verify = false
+# TLS certificate paths (required when tls_verify = true)
+# tls_ca_cert = ""
+# tls_cert = ""
+# tls_key = ""
+# Override the negotiated Docker API version, e.g. "1.44"
+# api_version = ""
+
+[rollback]
+# Roll back if the new container exits with a non-zero code.
+on_exit_code = true
+# Roll back if the new container's Docker healthcheck reports unhealthy.
+on_healthcheck = true
+# Roll back if the container does not reach the running state within startup_timeout.
+on_timeout = true
+# How long to wait for the new container to become healthy before rolling back.
+startup_timeout = "30s"
+
+[http_api]
+# Enable the POST /v1/update endpoint.
+update = false
+# Enable the GET /v1/metrics endpoint.
+metrics = false
+# Bearer token required for authenticated endpoints (or path to a Docker secret file).
+# token = ""
+# Port the HTTP server listens on.
+port = 8080
+# Allow unauthenticated access to GET /v1/metrics.
+metrics_no_auth = false
+# Path to HTTP API access log file (JSON, one line per request; optional).
+# access_log = "/var/log/saurron/access.log"
+
+[notifications]
+# Delay between cycle completion and notification dispatch, e.g. "0s", "30s".
+delay = "0s"
+# Path to a custom MiniJinja notification template file (optional).
+# template = ""
+# Send a notification after every cycle regardless of outcome (default: false).
+# notify_on_every_cycle = false
+
+[notifications.webhook]
+# HTTP endpoint to POST update reports to (enables webhook notifications).
+# url = ""
+# Extra request headers as comma-separated "Key: Value" pairs.
+# headers = ""
+# Skip TLS certificate verification for the webhook endpoint.
+tls_skip_verify = false
+
+[notifications.email]
+# SMTP server hostname (required to enable email notifications).
+# server = ""
+# SMTP server port.
+port = 587
+# Sender address (required).
+# from = ""
+# Recipient addresses (required; TOML array).
+# to = []
+# SMTP credentials (optional).
+# user = ""
+# password = ""
+# Skip TLS certificate verification for the SMTP connection.
+tls_skip_verify = false
+
+[notifications.mqtt]
+# MQTT broker address (required to enable MQTT). Supported schemes:
+#   tcp://  or  mqtt://  — plain TCP (default)
+#   mqtts:// or ssl://   — TLS (requires explicit TLS transport configuration below)
+# broker = ""
+# Topic to publish update reports to (required).
+# topic = ""
+# QoS level: 0 (at most once), 1 (at least once), 2 (exactly once).
+qos = 0
+# Client ID sent to the broker (auto-generated if omitted).
+# client_id = ""
+# Broker credentials (optional).
+# username = ""
+# password = ""
+# TLS settings (all optional; TLS is enabled when any TLS field is set or the
+# broker scheme is mqtts:// or ssl://).
+# Skip TLS certificate verification (insecure; useful for self-signed certs).
+# tls_skip_verify = false
+# Path to a PEM CA certificate for verifying the broker's certificate.
+# tls_ca_cert = ""
+# Path to a PEM client certificate for mutual TLS authentication.
+# tls_cert = ""
+# Path to a PEM client key for mutual TLS authentication.
+# tls_key = ""
+
+[notifications.pushover]
+# Pushover application token (required to enable Pushover notifications).
+# token = ""
+# Pushover user or group key (required).
+# user_key = ""
+```
