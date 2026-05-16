@@ -1142,8 +1142,15 @@ impl<'a> UpdateEngine<'a> {
                 info!(
                     container = %container.name,
                     new_id = %new_id,
-                    "self-update replacement started successfully; current process will exit"
+                    "self-update replacement started successfully; stopping old container"
                 );
+                if let Err(e) = self.docker.stop_container(&container.id, 10).await {
+                    warn!(
+                        container = %container.name,
+                        error = %e,
+                        "self-update: failed to stop old container"
+                    );
+                }
             }
             Err(trigger) => {
                 let reason = trigger.reason_str();
