@@ -128,7 +128,7 @@ jobs:
 
     steps:
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: /tmp/digests
           pattern: digest-${{ matrix.release }}-${{ matrix.variant }}-*
@@ -232,7 +232,7 @@ jobs:
 
     steps:
       - name: Download tarballs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: ./artifacts
           pattern: tarball-*
