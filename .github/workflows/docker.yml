@@ -76,7 +76,7 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.release }}-${{ matrix.variant }}-${{ env.PLATFORM_PAIR }}
           path: /tmp/digests/*
@@ -110,7 +110,7 @@ jobs:
           tar -czf saurron-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz \
             -C target/release saurron
       - name: Upload tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tarball-linux-${{ matrix.arch }}
           path: saurron-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz
