@@ -569,6 +569,12 @@ impl<'a> UpdateEngine<'a> {
     pub async fn run_cycle(&self, containers: &[docker::ContainerInfo]) -> SessionReport {
         let mut report = SessionReport::default();
         let own_id = selfupdate::detect_own_container_id();
+        match &own_id {
+            Some(id) => debug!(own_container_id = %id, "detected own container ID"),
+            None => debug!(
+                "could not detect own container ID; self-update will use regular update path"
+            ),
+        }
 
         // Phase A: scan all containers for staleness
         let mut stale: Vec<(docker::ContainerInfo, registry::StaleInfo)> = Vec::new();
@@ -1144,13 +1150,21 @@ impl<'a> UpdateEngine<'a> {
                     new_id = %new_id,
                     "self-update replacement started successfully; stopping old container"
                 );
-                if let Err(e) = self.docker.stop_container(&container.id, 10).await {
-                    warn!(
-                        container = %container.name,
-                        error = %e,
-                        "self-update: failed to stop old container"
-                    );
-                }
+                // Spawn the stop so this task can proceed to audit before the
+                // current process receives SIGTERM. A blocking await would
+                // deadlock: Docker stops us, we never return, audit is lost.
+                let docker = self.docker.clone();
+                let old_id = container.id.clone();
+                let container_name = container.name.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = docker.stop_container(&old_id, 10).await {
+                        warn!(
+                            container = %container_name,
+                            error = %e,
+                            "self-update: failed to stop old container"
+                        );
+                    }
+                });
             }
             Err(trigger) => {
                 let reason = trigger.reason_str();
