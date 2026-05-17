@@ -7,6 +7,7 @@ use bollard::Docker;
 
 use crate::config::DockerConfig;
 
+#[derive(Clone)]
 pub struct DockerClient {
     inner: Docker,
 }
