@@ -20,12 +20,21 @@ concurrency:
 
 jobs:
   update:
+    if: github.actor != 'commit-release-bot[bot]'
     runs-on: ubuntu-latest
 
     steps:
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.COMMIT_RELEASE_BOT_APP_ID }}
+          private-key: ${{ secrets.COMMIT_RELEASE_BOT_PRIVATE_KEY }}
+
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
 
       - uses: dtolnay/rust-toolchain@v1
         with:
@@ -68,8 +77,8 @@ jobs:
       - name: Commit if changed
         id: commit
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "commit-release-bot[bot]"
+          git config user.email "commit-release-bot[bot]@users.noreply.github.com"
           git add docs/collections/_reference/sample-config.md
           if git diff --staged --quiet; then
             echo "No changes to sample-config.md"
