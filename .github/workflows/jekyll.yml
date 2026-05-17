@@ -7,6 +7,7 @@
 name: Deploy Jekyll site to Pages
 
 on:
+  # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
     tags: ["v*"]
@@ -31,18 +32,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Create GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ vars.COMMIT_RELEASE_BOT_APP_ID }}
-          private-key: ${{ secrets.COMMIT_RELEASE_BOT_PRIVATE_KEY }}
-
       - name: Checkout
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
 
       - name: Generate release data
         run: |
@@ -70,8 +63,6 @@ jobs:
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@v6
-        with:
-          token: ${{ steps.app-token.outputs.token }}
 
       - name: Build with Jekyll
         # Outputs to the './_site' directory by default
@@ -85,7 +76,6 @@ jobs:
         with:
           # Reads from the './_site' directory by default
           path: ./docs/_site
-          token: ${{ steps.app-token.outputs.token }}
 
   # Deployment job
   deploy:
@@ -98,5 +88,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
-        with:
-          token: ${{ steps.app-token.outputs.token }}
