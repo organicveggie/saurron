@@ -29,7 +29,7 @@ motivates SSR is not material for an operator dashboard with modest data volumes
 ### Integration with the existing server
 
 Axum serves the compiled Svelte bundle from a `/ui` path when `http_api.web_ui` is enabled.
-The SPA communicates with Saurron exclusively through the HTTP API. Four new REST endpoints are
+The SPA communicates with Saurron exclusively through the HTTP API. Five new REST endpoints are
 added alongside the existing three:
 
 ```
@@ -39,6 +39,7 @@ Axum router
 ├── /v1/metrics                  (existing)
 ├── /v1/history                  (new — paginated cycle list)
 ├── /v1/history/:id              (new — single cycle with per-container detail)
+├── /v1/template                 (new — return currently configured template)
 ├── /v1/template/preview         (new — render template with synthetic data)
 ├── /v1/notifications/test       (new — send test notification to a target)
 └── /ui/*                        (new — static SPA bundle)
@@ -153,7 +154,8 @@ by the dashboard. A "Run Another" button resets the form.
 Validates a custom MiniJinja notification template against synthetic data before deploying it.
 
 **Template editor (SMUI TextField, multiline)**
-Pre-filled with the currently configured template, or the built-in default if none is set.
+Pre-filled by calling `GET /v1/template` on load. If the response is `null`, the editor shows
+the built-in default template so the user can see a meaningful starting point.
 Monospace font. Fills the available height.
 
 **Synthetic data selector (MD3 SegmentedButton)**
@@ -173,6 +175,8 @@ for the chosen scenario, guaranteeing the preview uses the same rendering path a
 **Preview panel**
 Rendered output in a read-only `<pre>` block. Template syntax errors appear in an MD3
 error-coloured banner above the panel.
+
+**API:** `GET /v1/template` → `{ template: string | null }` (`null` means no custom template is configured; the built-in default is in effect)
 
 **API:** `POST /v1/template/preview` body: `{ template: string, scenario: string }` → `{ rendered: string }` or `{ error: string }`
 
@@ -197,6 +201,8 @@ After sending, the card shows a success or error state inline — a green check 
 error icon with the message. The button re-enables after 3 seconds.
 
 **API:** `POST /v1/notifications/test` body: `{ target: string, scenario: string }` → `{ ok: bool, error?: string }`
+
+Valid `target` values: `"webhook"`, `"email"`, `"mqtt"`, `"pushover"` — matching the field names in `NotificationsConfig`. The server returns 400 if the named target is not configured.
 
 ---
 
@@ -228,13 +234,25 @@ without any per-component style overrides.
 
 ### `http_api.web_ui` (boolean, default `false`)
 
-Enables the static file routes for the Svelte bundle and the four new API endpoints. When
+Enables the static file routes for the Svelte bundle and the five new API endpoints. When
 `false`, the bundle routes and new endpoints are not mounted and no SQLite connection is
 opened.
+
+| Layer | Name |
+|-------|------|
+| TOML  | `[http_api]` section, key `web_ui` |
+| CLI   | `--http-api-web-ui` |
+| Env   | `SAURRON_HTTP_API_WEB_UI` |
 
 ### `db.path` (string, default `/etc/saurron/saurron.db`)
 
 Path to the SQLite database file. Created automatically on first run if it does not exist.
+
+| Layer | Name |
+|-------|------|
+| TOML  | `[db]` section, key `path` |
+| CLI   | `--db-path` |
+| Env   | `SAURRON_DB_PATH` |
 
 ---
 
@@ -242,9 +260,10 @@ Path to the SQLite database file. Created automatically on first run if it does 
 
 ### Rust (server-side)
 
-| Crate    | Purpose                                         |
-|----------|-------------------------------------------------|
-| `sqlx`   | Async SQLite access, compile-time query checks  |
+| Crate        | Purpose                                                         |
+|--------------|-----------------------------------------------------------------|
+| `sqlx`       | Async SQLite access, compile-time query checks (offline mode via `sqlx prepare`) |
+| `include_dir`| Embed the compiled `web/dist/` tree into the binary at compile time |
 
 ### JavaScript (frontend build)
 
@@ -264,18 +283,25 @@ production Docker images.
 
 ```
 pnpm install
-pnpm build          # Vite + Svelte → ui/dist/
+pnpm build          # Vite + Svelte → web/dist/
+cargo sqlx prepare  # update .sqlx/ offline query cache
 cargo build --release --features web
 ```
 
-The compiled `ui/dist/` directory is embedded into the Rust binary at compile time using
-`include_dir!` (or served from a path configured at runtime). In development, the Vite dev
-server proxies API requests to a locally running Saurron instance, so the frontend hot-reloads
-independently of the Rust build.
+The compiled `web/dist/` directory is embedded into the Rust binary at compile time using
+`include_dir!`. In development, the Vite dev server proxies API requests to a locally running
+Saurron instance, so the frontend hot-reloads independently of the Rust build.
 
-The `web` Cargo feature gates all SQLite and static-file-serving code. `cargo build` without
-the feature produces the current minimal binary unchanged, keeping the existing Docker image
-and CI paths unaffected until the feature is ready to ship.
+`sqlx` compile-time query checks require a `DATABASE_URL` environment variable pointing to a
+SQLite file when initially authoring queries. The checked-in `.sqlx/` offline query cache
+(produced by `cargo sqlx prepare`) is used in CI and on developer machines that lack a live
+database, so `DATABASE_URL` is not required for normal builds.
+
+The `web` Cargo feature gates all SQLite code, the static file routes, and the five new API
+endpoints (`/v1/history`, `/v1/history/:id`, `GET /v1/template`, `/v1/template/preview`,
+`/v1/notifications/test`). `cargo build` without the feature produces the current minimal
+binary unchanged, keeping the existing Docker image and CI paths unaffected until the feature
+is ready to ship.
 
 ---
 
