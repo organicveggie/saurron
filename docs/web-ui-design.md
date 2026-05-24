@@ -45,9 +45,9 @@ Axum router
 └── /ui/*                        (new — static SPA bundle)
 ```
 
-All new endpoints respect the existing Bearer token auth when `http_api.token` is set. The SPA
-stores the token in `sessionStorage` and attaches it as an `Authorization: Bearer` header on
-every request (see Future Enhancements for the login UX).
+Bearer token auth is **not enforced** on `/ui/*` or any of the five new API endpoints in the
+initial implementation. Auth enforcement for the web UI is deferred to a future enhancement
+(see Future Enhancements).
 
 ### Persistence
 
@@ -100,6 +100,37 @@ is not required. SMUI handles all component-level styling.
 
 A record is written only after a cycle completes. In-progress cycles are not visible in the UI
 until they finish.
+
+The `scanned` count shown in the dashboard table is not stored; it is computed as
+`updated + rolled_back + failed + skipped + up_to_date`. Cycle duration is also not stored; the
+client derives it from `completed_at − started_at`.
+
+### `SessionReport` refactoring
+
+`SessionReport` in `update.rs` is consolidated to carry rich per-container data:
+
+```rust
+pub struct SessionReport {
+    pub containers: Vec<ContainerReport>,
+}
+
+pub struct ContainerReport {
+    pub name: String,
+    pub outcome: ContainerOutcome, // Updated | RolledBack | Failed | Skipped | UpToDate
+    pub old_image: Option<String>,
+    pub new_image: Option<String>,
+}
+```
+
+The previous `updated: Vec<String>`, `skipped: Vec<String>`, `failed: Vec<String>`,
+`rolled_back: Vec<String>`, and `up_to_date: usize` fields are removed. `render_template` in
+`notifications.rs` derives the equivalent name-lists from `containers` when building the
+MiniJinja context so that existing custom templates continue to work unchanged.
+
+`SessionReport::record()` takes an additional `old_image: &str` parameter. For `Failed`
+containers, the caller passes the container's current image (from `ContainerInfo`); for
+`Updated` and `RolledBack`, the image values come from the `UpdateResult` variant directly and
+the parameter is ignored.
 
 ---
 
@@ -271,6 +302,7 @@ Path to the SQLite database file. Created automatically on first run if it does 
 |------------------------|--------------------------------------------------|
 | `svelte`               | UI framework                                     |
 | `vite` + `@sveltejs/vite-plugin-svelte` | Build toolchain             |
+| `svelte-routing`       | Client-side SPA router                           |
 | `@smui/*`              | MD3 component packages (Button, Card, DataTable, Drawer, TextField, etc.) |
 | `material-symbols`     | MD3 icon font                                    |
 
@@ -278,8 +310,8 @@ Path to the SQLite database file. Created automatically on first run if it does 
 
 ## Build pipeline
 
-The frontend is a separate build step that runs before the Rust binary is compiled for
-production Docker images.
+The `web/` directory lives at the repository root alongside `src/`. The frontend is a separate
+build step that runs before the Rust binary is compiled for production Docker images.
 
 ```
 pnpm install
@@ -364,9 +396,9 @@ available Rust-native option.
 
 ## Future enhancements
 
-- **Authentication UX** — Login page prompting for the Bearer token, stored in `sessionStorage`.
-  The existing `http_api.token` config value covers the web UI without a separate credential.
-  Add `401` redirect handling in the Svelte fetch wrapper.
+- **Authentication** — Enforce the existing `http_api.token` Bearer token on `/ui/*` and the
+  five new API endpoints. Add a login page that prompts for the token and stores it in
+  `sessionStorage`. Add `401` redirect handling in the Svelte fetch wrapper.
 - **Live cycle progress** — Replace the 5-second health poll with Server-Sent Events for
   real-time container-by-container progress during a running cycle.
 - **History search and filtering** — Date range picker, outcome filter, container name search
