@@ -7,7 +7,7 @@
         "vscode": {
             // Add the IDs of extensions you want installed when the container is created.
             "extensions": [
-                "anthropic.claude-code",
+                // "anthropic.claude-code",
                 "ms-azuretools.vscode-docker",
                 "rust-lang.rust-analyzer",
                 "tamasfe.even-better-toml"
@@ -16,6 +16,8 @@
     },
     // Features to add to the dev container. More info: https://containers.dev/features.
     "features": {
+        "ghcr.io/devcontainers/features/node:1": {},
+        "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {},
         "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
             "version": "latest",
@@ -27,10 +29,11 @@
     "mounts": [
         "source=devcontainer-cargo-cache-${devcontainerId},target=/usr/local/cargo,type=volume",
         "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude.json,target=/home/vscode/.claude.json,type=bind,consistency=cached",
-        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
+        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude/CLAUDE.md,target=/home/vscode/.claude/CLAUDE.md,type=bind,consistency=cached",
+        "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude/.credentials.json,target=/home/vscode/.claude/.credentials.json,type=bind,consistency=cached"
      ],
     // Use 'postCreateCommand' to run commands after the container is created.
-    "postCreateCommand": "rustc --version",
+    "postCreateCommand": "sudo chown -R vscode:vscode /home/vscode/.claude && rustc --version",
     // Use 'postStartCommand' to run commands every time the container is started.
     "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}"
 }
