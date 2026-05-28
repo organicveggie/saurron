@@ -15,22 +15,23 @@ Each milestone is one commit (or a small cluster of tightly coupled commits) on 
 
 ---
 
-### M1 — Rust: Cargo feature, config, dependencies
+### M1 — Rust: Cargo feature, config, dependencies ✓ DONE
 
 **No functional change. Compiles clean in both modes.**
 
 - `Cargo.toml`
   - Add `web` feature flag
-  - Add `sqlx` (with `sqlite`, `runtime-tokio`, `macros`, `migrate` features) gated by `web`
-  - Add `include_dir` gated by `web`
+  - Add `sqlx` 0.8.6 (with `sqlite`, `runtime-tokio`, `macros`, `migrate` features) gated by `web`
+  - Add `include_dir` 0.7.4 gated by `web`
 - `web/dist/.gitkeep`: empty placeholder so `include_dir!("web/dist")` compiles before `pnpm build` has run
-- `cli.rs`: add `--http-api-web-ui` (bool) and `--db-path` (PathBuf) args
+- `cli.rs`: add `--http-api-web-ui` (bool) and `--db-path` (PathBuf) args — both `#[cfg(feature = "web")]`
 - `config.rs`
-  - Add `HttpApiConfig.web_ui: bool` — TOML key `web_ui`, env `SAURRON_HTTP_API_WEB_UI`
-  - Add `DbConfig { path: PathBuf }` — TOML section `[db]`, key `path`, env `SAURRON_DB_PATH`, default `/etc/saurron/saurron.db`
+  - Add `HttpApiConfig.web_ui: bool` — TOML key `web_ui`, env `SAURRON_HTTP_API_WEB_UI` — `#[cfg(feature = "web")]`
+  - Add `DbConfig { path: PathBuf }` — TOML section `[db]`, key `path`, env `SAURRON_DB_PATH`, default `/etc/saurron/saurron.db` — `#[cfg(feature = "web")]`
   - Wire both into layered merge
+  - `log_settings()` emits `config: web` log line (feature-gated)
 
-**Acceptance:** `cargo build` and `cargo build --features web` both succeed; no existing tests broken.
+**Acceptance:** `cargo build` and `cargo build --features web` both succeed; no existing tests broken. ✓ 388 tests pass.
 
 ---
 

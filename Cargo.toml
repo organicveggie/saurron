@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 build = "build.rs"
 
+[features]
+web = ["dep:sqlx", "dep:include_dir"]
+
 [dependencies]
 anyhow = "1"
 axum = "0.8"
@@ -25,6 +28,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_urlencoded = "0.7"
 thiserror = "2"
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "macros", "migrate"], optional = true }
+include_dir = { version = "0.7", optional = true }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-appender = "0.2"
