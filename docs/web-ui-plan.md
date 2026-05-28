@@ -42,12 +42,16 @@ Each milestone is one commit (or a small cluster of tightly coupled commits) on 
 - `update.rs`
   - Replace flat `updated/skipped/failed/rolled_back/up_to_date: Vec<String>` + `up_to_date: usize` fields on `SessionReport` with `containers: Vec<ContainerReport>`
   - Add `ContainerReport { name, outcome: ContainerOutcome, old_image: Option<String>, new_image: Option<String> }`
+    - `old_image`: `Some(container.image)` for all outcomes (Updated, RolledBack, Skipped, Failed); `None` for UpToDate
+    - `new_image`: `Some(new_image)` for Updated and RolledBack only; `None` for all other outcomes
   - Add `ContainerOutcome` enum: `Updated | RolledBack | Failed | Skipped | UpToDate`
   - Add `started_at: DateTime<Utc>` and `completed_at: DateTime<Utc>` fields to `SessionReport`; `run_cycle` captures start time at entry and sets `completed_at` before returning
-  - Update every `record()` call site inside `run_cycle` to pass `old_image`
-- `notifications.rs`: derive name-lists from `containers` in `render_template`; update MiniJinja context so existing custom templates continue to work
+  - Update every `record()` call site inside `run_cycle` to pass `old_image` as `Some(container.image)`
+- `notifications.rs`
+  - Derive name-lists from `containers` in `render_template`; inject both derived name-lists (`updated`, `skipped`, `failed`, `rolled_back`, `up_to_date`) AND `containers` array into MiniJinja context so existing custom templates continue to work
+  - Update `should_notify` and all test helpers that construct `SessionReport` with old flat fields to use `ContainerReport` entries instead
+- `metrics.rs`: update `record_cycle` to iterate `report.containers` and filter by outcome rather than using removed flat fields; update affected tests
 - `http.rs`: update `SessionReport` serialisation; `POST /v1/update` response now includes a `containers` array
-- All unit tests touching `SessionReport` field names
 
 **Acceptance:** `cargo test` passes; `POST /v1/update` response includes `containers`.
 
