@@ -10,7 +10,7 @@ web = ["dep:sqlx", "dep:include_dir"]
 [dependencies]
 anyhow = "1"
 axum = "0.8"
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 cron = "0.16"
 futures = "0.3"
 bollard = { version = "0.20", features = ["ssl"] }

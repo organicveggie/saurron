@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use anyhow::Result;
+use chrono::{DateTime, Utc};
 use tracing::{debug, info, warn};
 
 use crate::{audit, config, docker, registry, selfupdate};
@@ -392,24 +393,54 @@ pub enum UpdateResult {
     Failed(anyhow::Error),
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContainerOutcome {
+    Updated,
+    RolledBack,
+    Failed,
+    Skipped,
+    UpToDate,
+}
+
+#[derive(Debug, serde::Serialize)]
+pub struct ContainerReport {
+    pub name: String,
+    pub outcome: ContainerOutcome,
+    pub old_image: Option<String>,
+    pub new_image: Option<String>,
+}
+
 #[derive(Debug, Default, serde::Serialize)]
 pub struct SessionReport {
-    pub updated: Vec<String>,
-    pub skipped: Vec<String>,
-    pub failed: Vec<String>,
-    pub rolled_back: Vec<String>,
-    pub up_to_date: usize,
+    pub containers: Vec<ContainerReport>,
+    pub started_at: DateTime<Utc>,
+    pub completed_at: DateTime<Utc>,
 }
 
 impl SessionReport {
-    pub fn record(&mut self, name: &str, result: &UpdateResult) {
-        match result {
-            UpdateResult::Updated { .. } => self.updated.push(name.to_string()),
-            UpdateResult::Skipped(_) => self.skipped.push(name.to_string()),
-            UpdateResult::Failed(_) => self.failed.push(name.to_string()),
-            UpdateResult::RolledBack { .. } => self.rolled_back.push(name.to_string()),
-            UpdateResult::UpToDate => self.up_to_date += 1,
-        }
+    pub fn record(&mut self, name: &str, result: &UpdateResult, old_image: Option<String>) {
+        let (outcome, old_img, new_img) = match result {
+            UpdateResult::Updated { old_image, new_image, .. } => (
+                ContainerOutcome::Updated,
+                Some(old_image.clone()),
+                Some(new_image.clone()),
+            ),
+            UpdateResult::RolledBack { old_image, attempted_image, .. } => (
+                ContainerOutcome::RolledBack,
+                Some(old_image.clone()),
+                Some(attempted_image.clone()),
+            ),
+            UpdateResult::Skipped(_) => (ContainerOutcome::Skipped, old_image, None),
+            UpdateResult::Failed(_) => (ContainerOutcome::Failed, old_image, None),
+            UpdateResult::UpToDate => (ContainerOutcome::UpToDate, None, None),
+        };
+        self.containers.push(ContainerReport {
+            name: name.to_string(),
+            outcome,
+            old_image: old_img,
+            new_image: new_img,
+        });
     }
 }
 
@@ -567,7 +598,8 @@ impl<'a> UpdateEngine<'a> {
     }
 
     pub async fn run_cycle(&self, containers: &[docker::ContainerInfo]) -> SessionReport {
-        let mut report = SessionReport::default();
+        let started_at = Utc::now();
+        let mut report = SessionReport { started_at, ..Default::default() };
         let own_id = selfupdate::detect_own_container_id();
         match &own_id {
             Some(id) => debug!(own_container_id = %id, "detected own container ID"),
@@ -582,7 +614,7 @@ impl<'a> UpdateEngine<'a> {
             match self.check_freshness(container).await {
                 registry::FreshnessResult::UpToDate => {
                     debug!(container = %container.name, "image up to date");
-                    report.up_to_date += 1;
+                    report.record(&container.name, &UpdateResult::UpToDate, None);
                 }
                 registry::FreshnessResult::Stale(info) => {
                     info!(
@@ -594,11 +626,11 @@ impl<'a> UpdateEngine<'a> {
                 }
                 registry::FreshnessResult::Skipped(reason) => {
                     info!(container = %container.name, reason, "freshness check skipped");
-                    report.record(&container.name, &UpdateResult::Skipped(reason));
+                    report.record(&container.name, &UpdateResult::Skipped(reason), Some(container.image.clone()));
                 }
                 registry::FreshnessResult::Error(reason) => {
                     warn!(container = %container.name, reason, "freshness check failed");
-                    report.record(&container.name, &UpdateResult::Skipped(reason));
+                    report.record(&container.name, &UpdateResult::Skipped(reason), Some(container.image.clone()));
                 }
             }
         }
@@ -620,7 +652,7 @@ impl<'a> UpdateEngine<'a> {
                 }
                 Err(e) => {
                     warn!(container = %c.name, error = %e, "inspect failed; skipping update");
-                    report.record(&c.name, &UpdateResult::Failed(e));
+                    report.record(&c.name, &UpdateResult::Failed(e), Some(c.image.clone()));
                 }
             }
         }
@@ -668,7 +700,7 @@ impl<'a> UpdateEngine<'a> {
                 }
                 _ => {}
             }
-            report.record(&container.name, &result);
+            report.record(&container.name, &result, Some(container.image.clone()));
         }
 
         // Phase D2: self-update (runs last)
@@ -684,19 +716,18 @@ impl<'a> UpdateEngine<'a> {
             if let UpdateResult::Failed(ref e) = result {
                 warn!(container = %container.name, error = %e, "self-update failed");
             }
-            report.record(&container.name, &result);
+            report.record(&container.name, &result, Some(container.image.clone()));
         }
 
         // Phase E: session summary
-        info!(
-            updated = report.updated.len(),
-            rolled_back = report.rolled_back.len(),
-            skipped = report.skipped.len(),
-            failed = report.failed.len(),
-            up_to_date = report.up_to_date,
-            "Update cycle complete"
-        );
+        let updated = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Updated).count();
+        let rolled_back = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::RolledBack).count();
+        let skipped = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Skipped).count();
+        let failed = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Failed).count();
+        let up_to_date = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::UpToDate).count();
+        info!(updated, rolled_back, skipped, failed, up_to_date, "Update cycle complete");
 
+        report.completed_at = Utc::now();
         report
     }
 
@@ -2281,23 +2312,40 @@ mod tests {
                 new_image: "nginx:2.0".to_string(),
                 new_digest: "sha256:bbb".to_string(),
             },
+            None,
         );
-        assert_eq!(report.updated, vec!["nginx"]);
-        assert_eq!(report.up_to_date, 0);
+        assert_eq!(report.containers.len(), 1);
+        assert_eq!(report.containers[0].outcome, ContainerOutcome::Updated);
+        assert_eq!(report.containers[0].old_image.as_deref(), Some("nginx:1.0"));
+        assert_eq!(report.containers[0].new_image.as_deref(), Some("nginx:2.0"));
     }
 
     #[test]
     fn session_report_records_skipped() {
         let mut report = SessionReport::default();
-        report.record("nginx", &UpdateResult::Skipped("monitor_only".to_string()));
-        assert_eq!(report.skipped, vec!["nginx"]);
+        report.record(
+            "nginx",
+            &UpdateResult::Skipped("monitor_only".to_string()),
+            Some("nginx:1.0".to_string()),
+        );
+        assert_eq!(report.containers.len(), 1);
+        assert_eq!(report.containers[0].outcome, ContainerOutcome::Skipped);
+        assert_eq!(report.containers[0].old_image.as_deref(), Some("nginx:1.0"));
+        assert!(report.containers[0].new_image.is_none());
     }
 
     #[test]
     fn session_report_records_failed() {
         let mut report = SessionReport::default();
-        report.record("nginx", &UpdateResult::Failed(anyhow::anyhow!("oops")));
-        assert_eq!(report.failed, vec!["nginx"]);
+        report.record(
+            "nginx",
+            &UpdateResult::Failed(anyhow::anyhow!("oops")),
+            Some("nginx:1.0".to_string()),
+        );
+        assert_eq!(report.containers.len(), 1);
+        assert_eq!(report.containers[0].outcome, ContainerOutcome::Failed);
+        assert_eq!(report.containers[0].old_image.as_deref(), Some("nginx:1.0"));
+        assert!(report.containers[0].new_image.is_none());
     }
 
     #[test]
@@ -2312,16 +2360,22 @@ mod tests {
                 attempted_digest: "sha256:bbb".to_string(),
                 reason: "healthcheck_failed".to_string(),
             },
+            None,
         );
-        assert_eq!(report.rolled_back, vec!["nginx"]);
+        assert_eq!(report.containers.len(), 1);
+        assert_eq!(report.containers[0].outcome, ContainerOutcome::RolledBack);
+        assert_eq!(report.containers[0].old_image.as_deref(), Some("nginx:1.0"));
+        assert_eq!(report.containers[0].new_image.as_deref(), Some("nginx:2.0"));
     }
 
     #[test]
     fn session_report_records_up_to_date() {
         let mut report = SessionReport::default();
-        report.record("nginx", &UpdateResult::UpToDate);
-        assert_eq!(report.up_to_date, 1);
-        assert!(report.updated.is_empty());
+        report.record("nginx", &UpdateResult::UpToDate, None);
+        assert_eq!(report.containers.len(), 1);
+        assert_eq!(report.containers[0].outcome, ContainerOutcome::UpToDate);
+        assert!(report.containers[0].old_image.is_none());
+        assert!(report.containers[0].new_image.is_none());
     }
 
     // ── build_dependency_graph — Docker --link ────────────────────────────────
