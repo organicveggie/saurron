@@ -2,13 +2,9 @@
 
 ## Overview
 
-A single-page application (SPA) built with Svelte and styled with Svelte Material UI (SMUI),
-served as a static asset bundle by Saurron's existing Axum HTTP server. The UI provides an
-update history dashboard, manual update triggers, custom template preview, and test notification
-dispatch, following Material Design 3 (MD3) principles including light/dark mode switching.
+SPA built with Svelte + SMUI, served as static bundle by existing Axum HTTP server. Provides update history dashboard, manual update triggers, custom template preview, test notification dispatch. Follows MD3 including light/dark mode.
 
-The web UI is an optional feature, gated by a new `http_api.web_ui` config flag alongside the
-existing `http_api.update` and `http_api.metrics` flags.
+Web UI optional, gated by new `http_api.web_ui` config flag alongside existing `http_api.update` and `http_api.metrics`.
 
 ---
 
@@ -16,21 +12,13 @@ existing `http_api.update` and `http_api.metrics` flags.
 
 ### Rendering model
 
-**Svelte SPA (client-side rendering).** Svelte compiles to a small, optimised JS/CSS bundle
-with no runtime framework overhead. Axum serves the bundle as static files; the browser
-downloads it once and handles all subsequent navigation client-side. The SPA calls Saurron's
-HTTP API for all data.
+**Svelte SPA (client-side rendering).** Svelte compiles to small optimised JS/CSS bundle, no runtime framework overhead. Axum serves bundle as static files; browser downloads once, handles all navigation client-side. SPA calls Saurron's HTTP API for all data.
 
-SvelteKit SSR was considered and rejected: it requires a persistent Node.js server process in
-production, which complicates deployment and introduces a second runtime dependency. Svelte's
-compiled output renders fast enough on the client that the blank-loading-state concern that
-motivates SSR is not material for an operator dashboard with modest data volumes.
+SvelteKit SSR considered and rejected: requires persistent Node.js server process in production, complicates deployment, adds second runtime dependency. Svelte compiled output renders fast enough client-side that blank-loading-state concern is not material for operator dashboard with modest data volumes.
 
 ### Integration with the existing server
 
-Axum serves the compiled Svelte bundle from a `/ui` path when `http_api.web_ui` is enabled.
-The SPA communicates with Saurron exclusively through the HTTP API. Five new REST endpoints are
-added alongside the existing three:
+Axum serves compiled Svelte bundle from `/ui` path when `http_api.web_ui` enabled. SPA communicates with Saurron exclusively through HTTP API. Five new REST endpoints added alongside existing three:
 
 ```
 Axum router
@@ -45,29 +33,19 @@ Axum router
 └── /ui/*                        (new — static SPA bundle)
 ```
 
-Bearer token auth is **not enforced** on `/ui/*` or any of the five new API endpoints in the
-initial implementation. Auth enforcement for the web UI is deferred to a future enhancement
-(see Future Enhancements).
+Bearer token auth **not enforced** on `/ui/*` or any five new API endpoints in initial implementation. Auth deferred to future enhancement (see Future Enhancements).
 
 ### Persistence
 
-SQLite via `sqlx` with the async SQLite driver. The database path is configurable
-(`db.path`; defaults to `/etc/saurron/saurron.db`). A connection pool (`SqlitePool`) is added
-to `AppStateInner`. Schema migrations run at startup via `sqlx::migrate!`.
+SQLite via `sqlx` with async SQLite driver. Database path configurable (`db.path`; defaults to `/etc/saurron/saurron.db`). `SqlitePool` added to `AppStateInner`. Schema migrations run at startup via `sqlx::migrate!`.
 
-Cycle data is written to SQLite at the end of every cycle (both scheduled and HTTP-triggered)
-in addition to the existing audit log. The web UI reads exclusively from SQLite.
+Cycle data written to SQLite at end of every cycle (scheduled and HTTP-triggered) in addition to existing audit log. Web UI reads exclusively from SQLite.
 
 ### Styling
 
-**Svelte Material UI (SMUI)** provides MD3-compliant components built on MD3's CSS custom
-property system (colour roles such as `--md-sys-color-primary`,
-`--md-sys-color-surface-container`, etc.). Dark mode is toggled by swapping the token values
-via a `class="smui-dark-theme"` attribute on the root element, which SMUI responds to natively.
-This gives correct MD3 tonal relationships in both themes rather than simple colour inversion.
+**Svelte Material UI (SMUI)** provides MD3-compliant components built on MD3's CSS custom property system (colour roles: `--md-sys-color-primary`, `--md-sys-color-surface-container`, etc.). Dark mode toggled by swapping token values via `class="smui-dark-theme"` on root element; SMUI responds natively. Gives correct MD3 tonal relationships in both themes rather than simple colour inversion.
 
-Tailwind CSS may optionally supplement SMUI for layout utilities (`flex`, `grid`, spacing) but
-is not required. SMUI handles all component-level styling.
+Tailwind CSS may optionally supplement SMUI for layout utilities (`flex`, `grid`, spacing) but not required. SMUI handles all component-level styling.
 
 ---
 
@@ -98,16 +76,13 @@ is not required. SMUI handles all component-level styling.
 | `new_image` | TEXT    | Image reference after update (null if no update)               |
 | `outcome`   | TEXT    | `"updated"`, `"rolled_back"`, `"failed"`, `"skipped"`, `"up_to_date"` |
 
-A record is written only after a cycle completes. In-progress cycles are not visible in the UI
-until they finish.
+Record written only after cycle completes. In-progress cycles not visible until finished.
 
-The `scanned` count shown in the dashboard table is not stored; it is computed as
-`updated + rolled_back + failed + skipped + up_to_date`. Cycle duration is also not stored; the
-client derives it from `completed_at − started_at`.
+`scanned` count shown in dashboard not stored; computed as `updated + rolled_back + failed + skipped + up_to_date`. Cycle duration not stored; client derives from `completed_at − started_at`.
 
 ### `SessionReport` refactoring
 
-`SessionReport` in `update.rs` is consolidated to carry rich per-container data:
+`SessionReport` in `update.rs` consolidated to carry rich per-container data:
 
 ```rust
 pub struct SessionReport {
@@ -122,15 +97,9 @@ pub struct ContainerReport {
 }
 ```
 
-The previous `updated: Vec<String>`, `skipped: Vec<String>`, `failed: Vec<String>`,
-`rolled_back: Vec<String>`, and `up_to_date: usize` fields are removed. `render_template` in
-`notifications.rs` derives the equivalent name-lists from `containers` when building the
-MiniJinja context so that existing custom templates continue to work unchanged.
+Previous `updated: Vec<String>`, `skipped: Vec<String>`, `failed: Vec<String>`, `rolled_back: Vec<String>`, and `up_to_date: usize` fields removed. `render_template` in `notifications.rs` derives equivalent name-lists from `containers` when building MiniJinja context so existing custom templates work unchanged.
 
-`SessionReport::record()` takes an additional `old_image: &str` parameter. For `Failed`
-containers, the caller passes the container's current image (from `ContainerInfo`); for
-`Updated` and `RolledBack`, the image values come from the `UpdateResult` variant directly and
-the parameter is ignored.
+`SessionReport::record()` takes additional `old_image: &str` parameter. For `Failed` containers, caller passes container's current image (from `ContainerInfo`); for `Updated` and `RolledBack`, image values come from `UpdateResult` variant directly and parameter is ignored.
 
 ---
 
@@ -138,19 +107,15 @@ the parameter is ignored.
 
 ### Dashboard (`/ui/`)
 
-The landing page. Gives operators a snapshot of Saurron's recent activity.
+Landing page. Gives operators snapshot of Saurron's recent activity.
 
 **Summary strip (MD3 Cards, top of page)**
-Three stat cards in a row: *Last cycle* (relative timestamp + outcome badge), *Updates this
-week* (count), *Failures this week* (count with error colour tint if non-zero).
+Three stat cards in a row: *Last cycle* (relative timestamp + outcome badge), *Updates this week* (count), *Failures this week* (count with error colour tint if non-zero).
 
 **Cycle history table (SMUI DataTable)**
-Paginated table (20 rows per page). Columns: started at, trigger, scanned, updated, failed,
-rolled back, duration. Each row is expandable to reveal a sub-table of per-container outcomes
-for that cycle, showing container name, old image, new image, and an outcome chip
-(colour-coded: green = updated, amber = rolled back, red = failed, grey = up-to-date/skipped).
+Paginated table (20 rows per page). Columns: started at, trigger, scanned, updated, failed, rolled back, duration. Each row expandable to reveal sub-table of per-container outcomes: container name, old image, new image, outcome chip (colour-coded: green = updated, amber = rolled back, red = failed, grey = up-to-date/skipped).
 
-Empty state shown when no cycles have been recorded yet.
+Empty state shown when no cycles recorded yet.
 
 **API:** `GET /v1/history?page=N&per_page=20` → `{ cycles: [...], total: N }`
 
@@ -160,21 +125,16 @@ Empty state shown when no cycles have been recorded yet.
 
 ### Manual Update (`/ui/update`)
 
-Triggers an immediate update cycle from the browser, equivalent to `POST /v1/update`.
+Triggers immediate update cycle from browser, equivalent to `POST /v1/update`.
 
 **Filter form (SMUI TextField)**
-Two optional inputs — *Container names* (comma-separated) and *Image prefixes*
-(comma-separated) — matching the existing query-parameter semantics of `POST /v1/update`.
-Both can be left blank to target all containers.
+Two optional inputs — *Container names* (comma-separated) and *Image prefixes* (comma-separated) — matching existing query-parameter semantics of `POST /v1/update`. Both can be blank to target all containers.
 
 **"Run Now" button (MD3 FilledButton)**
-Disabled while a cycle is running. If the update lock is held, the server returns 409 and
-the UI shows an SMUI Snackbar: "A cycle is already running."
+Disabled while cycle running. If update lock held, server returns 409 and UI shows SMUI Snackbar: "A cycle is already running."
 
 **Status and results**
-After submission, the form is replaced by an SMUI LinearProgress bar while the cycle runs.
-When complete, the full response is displayed inline in the same expandable-row format used
-by the dashboard. A "Run Another" button resets the form.
+After submission, form replaced by SMUI LinearProgress bar while cycle runs. When complete, full response displayed inline in same expandable-row format as dashboard. "Run Another" button resets form.
 
 **API:** `POST /v1/update` (existing endpoint, used directly)
 
@@ -182,12 +142,10 @@ by the dashboard. A "Run Another" button resets the form.
 
 ### Template Preview (`/ui/template`)
 
-Validates a custom MiniJinja notification template against synthetic data before deploying it.
+Validates custom MiniJinja notification template against synthetic data before deploying.
 
 **Template editor (SMUI TextField, multiline)**
-Pre-filled by calling `GET /v1/template` on load. If the response is `null`, the editor shows
-the built-in default template so the user can see a meaningful starting point.
-Monospace font. Fills the available height.
+Pre-filled by calling `GET /v1/template` on load. If response is `null`, editor shows built-in default template as starting point. Monospace font, fills available height.
 
 **Synthetic data selector (MD3 SegmentedButton)**
 Three preset scenarios:
@@ -199,15 +157,12 @@ Three preset scenarios:
 | *Nothing to do*  | 5 containers, all up-to-date                       |
 
 **"Preview" button (MD3 FilledTonalButton)**
-POSTs the template string and scenario identifier to the server. The server renders the
-template using the actual MiniJinja `render_template` function with a synthetic `SessionReport`
-for the chosen scenario, guaranteeing the preview uses the same rendering path as production.
+POSTs template string and scenario identifier to server. Server renders template using actual MiniJinja `render_template` with synthetic `SessionReport` for chosen scenario — guarantees preview uses same rendering path as production.
 
 **Preview panel**
-Rendered output in a read-only `<pre>` block. Template syntax errors appear in an MD3
-error-coloured banner above the panel.
+Rendered output in read-only `<pre>` block. Template syntax errors appear in MD3 error-coloured banner above panel.
 
-**API:** `GET /v1/template` → `{ template: string | null }` (`null` means no custom template is configured; the built-in default is in effect)
+**API:** `GET /v1/template` → `{ template: string | null }` (`null` means no custom template configured; built-in default in effect)
 
 **API:** `POST /v1/template/preview` body: `{ template: string, scenario: string }` → `{ rendered: string }` or `{ error: string }`
 
@@ -215,49 +170,36 @@ error-coloured banner above the panel.
 
 ### Test Notifications (`/ui/notifications`)
 
-Sends a real notification to configured targets using synthetic data, to verify delivery
-end-to-end without waiting for a real update cycle.
+Sends real notification to configured targets using synthetic data, to verify delivery end-to-end without waiting for real update cycle.
 
 **Target list (SMUI Cards)**
-One card per notification target type (Webhook, Email, MQTT, Pushover). Cards for unconfigured
-targets are shown in a disabled state. Each active card shows the target's key identifying
-field (URL, recipient, broker, etc.) and a *"Send Test"* button.
+One card per notification target type (Webhook, Email, MQTT, Pushover). Cards for unconfigured targets shown disabled. Each active card shows target's key identifying field (URL, recipient, broker, etc.) and *"Send Test"* button.
 
 **Scenario selector**
-Same three synthetic scenarios as the Template Preview page; the selected scenario applies to
-all targets.
+Same three synthetic scenarios as Template Preview; selected scenario applies to all targets.
 
 **Result feedback**
-After sending, the card shows a success or error state inline — a green check icon or a red
-error icon with the message. The button re-enables after 3 seconds.
+After sending, card shows success or error state inline — green check or red error icon with message. Button re-enables after 3 seconds.
 
 **API:** `POST /v1/notifications/test` body: `{ target: string, scenario: string }` → `{ ok: bool, error?: string }`
 
-Valid `target` values: `"webhook"`, `"email"`, `"mqtt"`, `"pushover"` — matching the field names in `NotificationsConfig`. The server returns 400 if the named target is not configured.
+Valid `target` values: `"webhook"`, `"email"`, `"mqtt"`, `"pushover"` — matching field names in `NotificationsConfig`. Server returns 400 if named target not configured.
 
 ---
 
 ## Navigation
 
-SMUI Navigation Drawer (persistent, left side) on desktop viewports; SMUI Bottom App Bar with
-navigation icons on narrow viewports. Four destinations with Material Symbols icons:
-Dashboard, Manual Update, Template Preview, Test Notifications.
+SMUI Navigation Drawer (persistent, left side) on desktop; SMUI Bottom App Bar with navigation icons on narrow viewports. Four destinations with Material Symbols icons: Dashboard, Manual Update, Template Preview, Test Notifications.
 
-The drawer header shows a status chip indicating whether a cycle is currently running, updated
-by polling `GET /v1/health` every 5 seconds while the UI is open. The health response is
-extended to include an `updating: bool` field.
+Drawer header shows status chip indicating whether cycle currently running, updated by polling `GET /v1/health` every 5 seconds while UI open. Health response extended to include `updating: bool` field.
 
 ---
 
 ## Dark mode
 
-A toggle button in the top app bar switches between light and dark themes. The preference is
-persisted in `localStorage` and applied before first paint to avoid a flash of the wrong theme.
+Toggle button in top app bar switches light/dark themes. Preference persisted in `localStorage`, applied before first paint to avoid flash of wrong theme.
 
-SMUI's dark mode is activated by adding `class="smui-dark-theme"` to the `<body>` element.
-Because SMUI implements MD3 colour roles as CSS custom properties, toggling the class
-automatically recomputes tonal surface, container, and on-colour values across all components
-without any per-component style overrides.
+SMUI dark mode activated by adding `class="smui-dark-theme"` to `<body>`. SMUI implements MD3 colour roles as CSS custom properties, so toggling class automatically recomputes tonal surface, container, and on-colour values across all components — no per-component style overrides needed.
 
 ---
 
@@ -265,9 +207,7 @@ without any per-component style overrides.
 
 ### `http_api.web_ui` (boolean, default `false`)
 
-Enables the static file routes for the Svelte bundle and the five new API endpoints. When
-`false`, the bundle routes and new endpoints are not mounted and no SQLite connection is
-opened.
+Enables static file routes for Svelte bundle and five new API endpoints. When `false`, bundle routes and new endpoints not mounted and no SQLite connection opened.
 
 | Layer | Name |
 |-------|------|
@@ -277,7 +217,7 @@ opened.
 
 ### `db.path` (string, default `/etc/saurron/saurron.db`)
 
-Path to the SQLite database file. Created automatically on first run if it does not exist.
+Path to SQLite database file. Created automatically on first run if not exists.
 
 | Layer | Name |
 |-------|------|
@@ -294,7 +234,7 @@ Path to the SQLite database file. Created automatically on first run if it does 
 | Crate        | Purpose                                                         |
 |--------------|-----------------------------------------------------------------|
 | `sqlx`       | Async SQLite access, compile-time query checks (offline mode via `sqlx prepare`) |
-| `include_dir`| Embed the compiled `web/dist/` tree into the binary at compile time |
+| `include_dir`| Embed compiled `web/dist/` tree into binary at compile time |
 
 ### JavaScript (frontend build)
 
@@ -310,8 +250,7 @@ Path to the SQLite database file. Created automatically on first run if it does 
 
 ## Build pipeline
 
-The `web/` directory lives at the repository root alongside `src/`. The frontend is a separate
-build step that runs before the Rust binary is compiled for production Docker images.
+`web/` directory at repository root alongside `src/`. Frontend is separate build step before Rust binary compiled for production Docker images.
 
 ```
 pnpm install
@@ -320,20 +259,11 @@ cargo sqlx prepare  # update .sqlx/ offline query cache
 cargo build --release --features web
 ```
 
-The compiled `web/dist/` directory is embedded into the Rust binary at compile time using
-`include_dir!`. In development, the Vite dev server proxies API requests to a locally running
-Saurron instance, so the frontend hot-reloads independently of the Rust build.
+Compiled `web/dist/` embedded into Rust binary at compile time using `include_dir!`. In development, Vite dev server proxies API requests to locally running Saurron instance — frontend hot-reloads independently of Rust build.
 
-`sqlx` compile-time query checks require a `DATABASE_URL` environment variable pointing to a
-SQLite file when initially authoring queries. The checked-in `.sqlx/` offline query cache
-(produced by `cargo sqlx prepare`) is used in CI and on developer machines that lack a live
-database, so `DATABASE_URL` is not required for normal builds.
+`sqlx` compile-time query checks require `DATABASE_URL` env var pointing to SQLite file when initially authoring queries. Checked-in `.sqlx/` offline query cache (from `cargo sqlx prepare`) used in CI and on developer machines without live database — `DATABASE_URL` not required for normal builds.
 
-The `web` Cargo feature gates all SQLite code, the static file routes, and the five new API
-endpoints (`/v1/history`, `/v1/history/:id`, `GET /v1/template`, `/v1/template/preview`,
-`/v1/notifications/test`). `cargo build` without the feature produces the current minimal
-binary unchanged, keeping the existing Docker image and CI paths unaffected until the feature
-is ready to ship.
+`web` Cargo feature gates all SQLite code, static file routes, and five new API endpoints (`/v1/history`, `/v1/history/:id`, `GET /v1/template`, `/v1/template/preview`, `/v1/notifications/test`). `cargo build` without feature produces current minimal binary unchanged, keeping existing Docker image and CI paths unaffected until feature ready.
 
 ---
 
@@ -341,9 +271,7 @@ is ready to ship.
 
 ### Leptos (original choice)
 
-Leptos was the initial framework selection: a Rust-native SSR framework with Axum integration
-that would have kept the entire stack in Rust. The blocker was the Leptos component library
-ecosystem. Every MD3-oriented library was abandoned or unmaintained:
+Initial framework selection: Rust-native SSR with Axum integration, entire stack in Rust. Blocker was component library ecosystem. Every MD3-oriented library abandoned or unmaintained:
 
 - **leptos-material** — no updates in 2 years
 - **leptonic** — no updates in 2 years
@@ -351,57 +279,35 @@ ecosystem. Every MD3-oriented library was abandoned or unmaintained:
 - **leptos-shadcn-ui** — open PRs untouched for 5 months
 - **Holt** — active but low adoption and incomplete coverage
 
-Proceeding with Leptos would have meant hand-implementing every MD3 component (Navigation
-Drawer, Data Table, Chips, Snackbar, etc.) in addition to the application logic.
+Proceeding with Leptos meant hand-implementing every MD3 component (Navigation Drawer, Data Table, Chips, Snackbar, etc.) on top of application logic.
 
 ### Dioxus
 
-The most actively maintained Rust WASM framework and the closest direct alternative to Leptos.
-The component library situation is similar — sparse and early-stage — so the same
-hand-implementation burden would apply. Rejected for the same reason as Leptos.
+Most actively maintained Rust WASM framework, closest alternative to Leptos. Component library situation similar — sparse and early-stage — same hand-implementation burden. Rejected for same reason as Leptos.
 
 ### HTMX + DaisyUI
 
-HTMX handles partial page updates via server-rendered HTML fragments; DaisyUI provides
-Tailwind-based UI components. The approach is radically simpler than any WASM framework —
-no build complexity, no WASM toolchain, no separate language — and viable for the four
-features this UI needs.
+HTMX handles partial page updates via server-rendered HTML fragments; DaisyUI provides Tailwind-based components. Radically simpler — no build complexity, no WASM toolchain, no separate language — viable for the four features needed.
 
-The reason it was not chosen: HTMX itself provides no UI components. DaisyUI has a light/dark
-mode story but approximates MD3 rather than implementing it; matching MD3 colour roles and
-component semantics precisely would require the same manual CSS work as hand-implementing
-components in a JS framework, with less benefit since DaisyUI's own component styles would
-be fighting the MD3 overrides.
+Not chosen: HTMX provides no UI components. DaisyUI approximates MD3 rather than implementing it; matching MD3 colour roles and component semantics precisely would require same manual CSS work as hand-implementing components in a JS framework, with less benefit since DaisyUI styles would fight MD3 overrides.
 
 ### Vue + Vuetify
 
-Vuetify is arguably the most complete MD3 implementation available in any framework. Rejected
-because Vue adds significant weight to the frontend stack and Vuetify's bundle size is
-substantial for an operator-facing admin panel.
+Vuetify arguably most complete MD3 implementation in any framework. Rejected: Vue adds significant weight and Vuetify bundle size is substantial for an operator-facing admin panel.
 
 ### React + MUI
 
-MUI has full MD3 coverage and the largest ecosystem. Rejected for the same reasons as Vue —
-too heavyweight for this use case.
+MUI has full MD3 coverage and largest ecosystem. Rejected for same reasons as Vue — too heavyweight.
 
 ### Svelte + SMUI (chosen)
 
-Svelte compiles away at build time, producing small and fast output with no runtime framework.
-SMUI is built directly on MD3's CSS custom property system, giving correct MD3 tonal colour
-relationships in both light and dark themes with a clean toggle mechanism. The combination
-is significantly lighter than Vue or React while providing better MD3 fidelity than any
-available Rust-native option.
+Svelte compiles away at build time — small, fast output, no runtime framework. SMUI built directly on MD3's CSS custom property system, giving correct MD3 tonal colour relationships in light and dark themes with clean toggle. Significantly lighter than Vue or React, better MD3 fidelity than any Rust-native option.
 
 ---
 
 ## Future enhancements
 
-- **Authentication** — Enforce the existing `http_api.token` Bearer token on `/ui/*` and the
-  five new API endpoints. Add a login page that prompts for the token and stores it in
-  `sessionStorage`. Add `401` redirect handling in the Svelte fetch wrapper.
-- **Live cycle progress** — Replace the 5-second health poll with Server-Sent Events for
-  real-time container-by-container progress during a running cycle.
-- **History search and filtering** — Date range picker, outcome filter, container name search
-  on the dashboard table.
-- **Notification target configuration UI** — View and edit notification settings from the
-  browser rather than editing config files directly.
+- **Authentication** — Enforce existing `http_api.token` Bearer token on `/ui/*` and five new API endpoints. Add login page prompting for token, stores in `sessionStorage`. Add `401` redirect handling in Svelte fetch wrapper.
+- **Live cycle progress** — Replace 5-second health poll with Server-Sent Events for real-time container-by-container progress during running cycle.
+- **History search and filtering** — Date range picker, outcome filter, container name search on dashboard table.
+- **Notification target configuration UI** — View and edit notification settings from browser rather than editing config files directly.

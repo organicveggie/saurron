@@ -30,6 +30,9 @@ Build script (`build.rs`) embed version string from `SAURRON_BUILD_VERSION` env 
 
 Saurron = Docker container auto-updater. Watch containers, check image registries for updates, restart containers with newer image — preserve original run config.
 
+Backend: Rust
+Frontend: SPA built with Svelte + SMUI, served as static bundle by integrated Axum HTTP server.
+
 ### Module overview
 
 | File | Role |
