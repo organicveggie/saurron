@@ -14,7 +14,19 @@
                 "ms-azuretools.vscode-docker",
                 "rust-lang.rust-analyzer",
                 "tamasfe.even-better-toml"
-            ]
+            ],
+            "settings": {
+                "remote.portsAttributes": {
+                    // Forward standard ports if they show up
+                    "8000-9000": {
+                        "onAutoForward": "notify"
+                    },
+                    // Ignore auto forwarding for other high ports
+                    "10000-65535": {
+                        "onAutoForward": "ignore"
+                    }
+                }
+            }
         }
     },
     // Features to add to the dev container. More info: https://containers.dev/features.
