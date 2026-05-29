@@ -22,6 +22,8 @@ pub struct AppStateInner {
     pub selector: docker::ContainerSelector,
     /// Held for the duration of any update cycle. Scheduler: .lock().await; HTTP: .try_lock().
     pub update_lock: tokio::sync::Mutex<()>,
+    #[cfg(feature = "web")]
+    pub pool: Option<sqlx::SqlitePool>,
 }
 
 pub type AppState = Arc<AppStateInner>;
@@ -208,7 +210,8 @@ fn check_auth(headers: &HeaderMap, token: &str) -> bool {
 }
 
 /// Run a full enumeration + update cycle using the shared application state.
-pub async fn run_cycle_with_state(state: &AppStateInner) {
+#[cfg_attr(not(feature = "web"), allow(unused_variables))]
+pub async fn run_cycle_with_state(state: &AppStateInner, trigger: &str) {
     let all = match state.docker.list_containers(&state.selector).await {
         Ok(v) => v,
         Err(e) => {
@@ -222,6 +225,12 @@ pub async fn run_cycle_with_state(state: &AppStateInner) {
         .await;
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
+    #[cfg(feature = "web")]
+    if let Some(pool) = &state.pool {
+        if let Err(e) = crate::db::record_cycle(pool, &report, trigger).await {
+            error!(error = %e, trigger, "failed to persist cycle to database");
+        }
+    }
 }
 
 async fn health() -> impl IntoResponse {
@@ -281,6 +290,12 @@ async fn post_update(
 
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
+    #[cfg(feature = "web")]
+    if let Some(pool) = &state.pool {
+        if let Err(e) = crate::db::record_cycle(pool, &report, "http_api").await {
+            error!(error = %e, trigger = "http_api", "failed to persist cycle to database");
+        }
+    }
 
     Json(report).into_response()
 }
@@ -424,6 +439,8 @@ mod tests {
             port: 8080,
             metrics_no_auth,
             access_log: None,
+            #[cfg(feature = "web")]
+            web_ui: false,
         }
     }
 

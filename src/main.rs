@@ -275,18 +275,31 @@ async fn main() -> anyhow::Result<()> {
     )
     .context("failed to initialise registry client")?;
 
+    #[cfg(feature = "web")]
+    let db_pool = if config.http_api.web_ui {
+        Some(
+            saurron::db::init_pool(&config.db.path)
+                .await
+                .context("failed to open database")?,
+        )
+    } else {
+        None
+    };
+
     let state = Arc::new(http::AppStateInner {
         docker,
         registry: registry_client,
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        #[cfg(feature = "web")]
+        pool: db_pool,
     });
 
     let http_enabled = state.config.http_api.update || state.config.http_api.metrics;
 
     if matches!(schedule_mode, scheduler::ScheduleMode::RunOnce) {
-        http::run_cycle_with_state(&state).await;
+        http::run_cycle_with_state(&state, "manual").await;
         return Ok(());
     }
 
@@ -296,7 +309,7 @@ async fn main() -> anyhow::Result<()> {
             let s = Arc::clone(&state_for_scheduler);
             async move {
                 let _guard = s.update_lock.lock().await;
-                http::run_cycle_with_state(&s).await;
+                http::run_cycle_with_state(&s, "scheduled").await;
             }
         })
         .await;

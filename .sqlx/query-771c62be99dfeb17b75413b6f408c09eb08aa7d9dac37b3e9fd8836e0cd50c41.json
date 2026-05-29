@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, started_at, completed_at, trigger, updated, rolled_back, failed, skipped, up_to_date FROM cycles WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      },
+      {
+        "name": "started_at",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "completed_at",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "trigger",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated",
+        "ordinal": 4,
+        "type_info": "Integer"
+      },
+      {
+        "name": "rolled_back",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "failed",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "skipped",
+        "ordinal": 7,
+        "type_info": "Integer"
+      },
+      {
+        "name": "up_to_date",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "771c62be99dfeb17b75413b6f408c09eb08aa7d9dac37b3e9fd8836e0cd50c41"
+}

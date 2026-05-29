@@ -458,6 +458,8 @@ async fn post_update_via_http_records_scan_cycle_metric() {
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        #[cfg(feature = "web")]
+        pool: None,
     });
 
     let port = start_saurron_server(Arc::clone(&state)).await;
@@ -597,6 +599,8 @@ async fn post_update_via_http_dispatches_webhook_on_update() {
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        #[cfg(feature = "web")]
+        pool: None,
     });
 
     let saurron_port = start_saurron_server(Arc::clone(&state)).await;
