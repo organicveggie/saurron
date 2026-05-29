@@ -61,14 +61,26 @@ Each milestone is one commit (or a small cluster of tightly coupled commits) on 
 
 - `migrations/001_initial.sql`: `CREATE TABLE cycles` and `CREATE TABLE cycle_containers` per the schema in `docs/web-ui-design.md`
 - `src/db.rs` (new, `#[cfg(feature = "web")]`)
-  - `init_pool(path: &Path) -> SqlitePool`
-  - `record_cycle(pool, report: &SessionReport, trigger: &str) -> Result<i64>` — reads `started_at`/`completed_at` from `SessionReport`
+  - `init_pool(path: &Path) -> Result<SqlitePool>` — fails fast: panics/returns `Err` if pool open or migration fails; caller aborts startup
+  - `record_cycle(pool, report: &SessionReport, trigger: &str) -> Result<i64>` — reads `started_at`/`completed_at` from `SessionReport`; propagates DB errors to caller
   - `list_cycles(pool, page, per_page) -> Result<(Vec<CycleRow>, i64)>`
   - `get_cycle(pool, id) -> Result<Option<(CycleRow, Vec<CycleContainerRow>)>>`
 - `src/lib.rs`: re-export `db` module behind `web` feature
-- `main.rs`: open pool on startup when `config.http_api.web_ui` is true; add to `AppStateInner`
-- Call `db::record_cycle` from each call site that already knows the trigger — scheduler (`"scheduled"`), `post_update` HTTP handler (`"http_api"`), CLI `--run-once` path (`"manual"`) — alongside existing `metrics::record_cycle` and `notifications::dispatch` calls
-- `.sqlx/` offline query cache: run `cargo sqlx prepare --features web` and commit
+- `main.rs`:
+  - Add `pool: Option<SqlitePool>` to `AppStateInner` (compiled only under `#[cfg(feature = "web")]`)
+  - Open pool at startup when `config.http_api.web_ui` is true; abort process on failure
+  - Pool is `None` when `web_ui` is false (no DB opened)
+- `http.rs`: add `trigger: &str` parameter to `run_cycle_with_state`; pass trigger through so each call site supplies the correct value
+- Call `db::record_cycle` inside `run_cycle_with_state` when `state.pool` is `Some`, alongside existing `metrics::record_cycle` and `notifications::dispatch` calls; propagate/log any `Err` returned
+- Trigger values per call site:
+  - scheduler loop in `main.rs` → `"scheduled"`
+  - `post_update` HTTP handler → `"http_api"`
+  - `--run-once` path in `main.rs` → `"manual"`
+- `.sqlx/` offline query cache:
+  - Install `sqlx-cli` if not present: `cargo install sqlx-cli --no-default-features --features sqlite`
+  - Create a temp DB and run migrations: `DATABASE_URL=sqlite:///tmp/saurron_prepare.db cargo sqlx migrate run --source migrations`
+  - Generate cache: `DATABASE_URL=sqlite:///tmp/saurron_prepare.db cargo sqlx prepare --features web`
+  - Commit the generated `.sqlx/` directory; CI builds without `DATABASE_URL` using this cache
 
 **Acceptance:** running with `--http-api-web-ui --db-path /tmp/t.db` writes rows after a cycle finishes; `cargo build --features web` succeeds in CI without `DATABASE_URL`.
 
