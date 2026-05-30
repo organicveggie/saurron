@@ -16,7 +16,10 @@ Up to date: {{ up_to_date }}"#;
 /// Returns true when the cycle produced at least one update, failure, or rollback.
 pub fn should_notify(report: &SessionReport) -> bool {
     report.containers.iter().any(|c| {
-        matches!(c.outcome, ContainerOutcome::Updated | ContainerOutcome::Failed | ContainerOutcome::RolledBack)
+        matches!(
+            c.outcome,
+            ContainerOutcome::Updated | ContainerOutcome::Failed | ContainerOutcome::RolledBack
+        )
     })
 }
 
@@ -25,23 +28,33 @@ pub fn should_notify(report: &SessionReport) -> bool {
 pub fn render_template(report: &SessionReport, template: Option<&str>) -> Result<String> {
     use minijinja::{Environment, context};
 
-    let updated: Vec<&str> = report.containers.iter()
+    let updated: Vec<&str> = report
+        .containers
+        .iter()
         .filter(|c| c.outcome == ContainerOutcome::Updated)
         .map(|c| c.name.as_str())
         .collect();
-    let skipped: Vec<&str> = report.containers.iter()
+    let skipped: Vec<&str> = report
+        .containers
+        .iter()
         .filter(|c| c.outcome == ContainerOutcome::Skipped)
         .map(|c| c.name.as_str())
         .collect();
-    let failed: Vec<&str> = report.containers.iter()
+    let failed: Vec<&str> = report
+        .containers
+        .iter()
         .filter(|c| c.outcome == ContainerOutcome::Failed)
         .map(|c| c.name.as_str())
         .collect();
-    let rolled_back: Vec<&str> = report.containers.iter()
+    let rolled_back: Vec<&str> = report
+        .containers
+        .iter()
         .filter(|c| c.outcome == ContainerOutcome::RolledBack)
         .map(|c| c.name.as_str())
         .collect();
-    let up_to_date = report.containers.iter()
+    let up_to_date = report
+        .containers
+        .iter()
         .filter(|c| c.outcome == ContainerOutcome::UpToDate)
         .count();
 
@@ -778,7 +791,9 @@ mod tests {
         };
         // All-up-to-date report — should_notify returns false, dispatch is a no-op.
         let report = SessionReport {
-            containers: (0..10).map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate)).collect(),
+            containers: (0..10)
+                .map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate))
+                .collect(),
             ..Default::default()
         };
         dispatch(&config, &report).await; // must not panic or block
@@ -863,7 +878,9 @@ mod tests {
         // All-up-to-date report: should_notify returns false, but notify_on_every_cycle
         // overrides the early return. No targets configured, so dispatch completes cleanly.
         let report = SessionReport {
-            containers: (0..5).map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate)).collect(),
+            containers: (0..5)
+                .map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate))
+                .collect(),
             ..Default::default()
         };
         dispatch(&config, &report).await; // must not return early; must not panic
@@ -887,7 +904,9 @@ mod tests {
             pushover: None,
         };
         let report = SessionReport {
-            containers: (0..5).map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate)).collect(),
+            containers: (0..5)
+                .map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate))
+                .collect(),
             ..Default::default()
         };
         dispatch(&config, &report).await; // returns early; must not panic

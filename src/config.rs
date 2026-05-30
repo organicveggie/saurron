@@ -679,9 +679,7 @@ impl Config {
                     .db_path
                     .clone()
                     .or_else(|| pdb.path.map(std::path::PathBuf::from))
-                    .unwrap_or_else(|| {
-                        std::path::PathBuf::from("/etc/saurron/saurron.db")
-                    }),
+                    .unwrap_or_else(|| std::path::PathBuf::from("/etc/saurron/saurron.db")),
             },
         }
     }

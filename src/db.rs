@@ -37,17 +37,26 @@ pub async fn record_cycle(pool: &SqlitePool, report: &SessionReport, trigger: &s
     let started_at = report.started_at.to_rfc3339();
     let completed_at = report.completed_at.to_rfc3339();
 
-    let updated =
-        report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Updated).count() as i64;
+    let updated = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Updated)
+        .count() as i64;
     let rolled_back = report
         .containers
         .iter()
         .filter(|c| c.outcome == ContainerOutcome::RolledBack)
         .count() as i64;
-    let failed =
-        report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Failed).count() as i64;
-    let skipped =
-        report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Skipped).count() as i64;
+    let failed = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Failed)
+        .count() as i64;
+    let skipped = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Skipped)
+        .count() as i64;
     let up_to_date = report
         .containers
         .iter()

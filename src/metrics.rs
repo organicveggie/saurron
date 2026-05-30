@@ -53,10 +53,18 @@ pub fn record_cycle(report: &SessionReport) {
     SCAN_CYCLES.inc();
     CONTAINERS_SCANNED.inc_by(report.containers.len() as u64);
     CONTAINERS_UPDATED.inc_by(
-        report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Updated).count() as u64,
+        report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::Updated)
+            .count() as u64,
     );
     CONTAINERS_FAILED.inc_by(
-        report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Failed).count() as u64,
+        report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::Failed)
+            .count() as u64,
     );
 }
 

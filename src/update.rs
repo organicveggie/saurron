@@ -421,12 +421,20 @@ pub struct SessionReport {
 impl SessionReport {
     pub fn record(&mut self, name: &str, result: &UpdateResult, old_image: Option<String>) {
         let (outcome, old_img, new_img) = match result {
-            UpdateResult::Updated { old_image, new_image, .. } => (
+            UpdateResult::Updated {
+                old_image,
+                new_image,
+                ..
+            } => (
                 ContainerOutcome::Updated,
                 Some(old_image.clone()),
                 Some(new_image.clone()),
             ),
-            UpdateResult::RolledBack { old_image, attempted_image, .. } => (
+            UpdateResult::RolledBack {
+                old_image,
+                attempted_image,
+                ..
+            } => (
                 ContainerOutcome::RolledBack,
                 Some(old_image.clone()),
                 Some(attempted_image.clone()),
@@ -599,7 +607,10 @@ impl<'a> UpdateEngine<'a> {
 
     pub async fn run_cycle(&self, containers: &[docker::ContainerInfo]) -> SessionReport {
         let started_at = Utc::now();
-        let mut report = SessionReport { started_at, ..Default::default() };
+        let mut report = SessionReport {
+            started_at,
+            ..Default::default()
+        };
         let own_id = selfupdate::detect_own_container_id();
         match &own_id {
             Some(id) => debug!(own_container_id = %id, "detected own container ID"),
@@ -626,11 +637,19 @@ impl<'a> UpdateEngine<'a> {
                 }
                 registry::FreshnessResult::Skipped(reason) => {
                     info!(container = %container.name, reason, "freshness check skipped");
-                    report.record(&container.name, &UpdateResult::Skipped(reason), Some(container.image.clone()));
+                    report.record(
+                        &container.name,
+                        &UpdateResult::Skipped(reason),
+                        Some(container.image.clone()),
+                    );
                 }
                 registry::FreshnessResult::Error(reason) => {
                     warn!(container = %container.name, reason, "freshness check failed");
-                    report.record(&container.name, &UpdateResult::Skipped(reason), Some(container.image.clone()));
+                    report.record(
+                        &container.name,
+                        &UpdateResult::Skipped(reason),
+                        Some(container.image.clone()),
+                    );
                 }
             }
         }
@@ -720,12 +739,35 @@ impl<'a> UpdateEngine<'a> {
         }
 
         // Phase E: session summary
-        let updated = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Updated).count();
-        let rolled_back = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::RolledBack).count();
-        let skipped = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Skipped).count();
-        let failed = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Failed).count();
-        let up_to_date = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::UpToDate).count();
-        info!(updated, rolled_back, skipped, failed, up_to_date, "Update cycle complete");
+        let updated = report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::Updated)
+            .count();
+        let rolled_back = report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::RolledBack)
+            .count();
+        let skipped = report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::Skipped)
+            .count();
+        let failed = report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::Failed)
+            .count();
+        let up_to_date = report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::UpToDate)
+            .count();
+        info!(
+            updated,
+            rolled_back, skipped, failed, up_to_date, "Update cycle complete"
+        );
 
         report.completed_at = Utc::now();
         report
