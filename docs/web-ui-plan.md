@@ -35,7 +35,7 @@ Each milestone is one commit (or a small cluster of tightly coupled commits) on 
 
 ---
 
-### M2 — Rust: SessionReport refactor
+### M2 — Rust: SessionReport refactor ✓ DONE
 
 **Breaking change within the crate; external `POST /v1/update` response shape changes.**
 
@@ -57,7 +57,7 @@ Each milestone is one commit (or a small cluster of tightly coupled commits) on 
 
 ---
 
-### M3 — Rust: SQLite schema and cycle persistence
+### M3 — Rust: SQLite schema and cycle persistence ✓ DONE
 
 - `migrations/001_initial.sql`: `CREATE TABLE cycles` and `CREATE TABLE cycle_containers` per the schema in `docs/web-ui-design.md`
 - `src/db.rs` (new, `#[cfg(feature = "web")]`)
@@ -103,8 +103,22 @@ All new routes compiled only with `--features web`. No auth enforced in v1.
 - `GET /v1/health`: add `updating: bool`, `version: string`, `hostname: string` fields
 
 **Notes on `/v1/containers`:**
-- Calls `docker.list_containers()` at request time (returns only selected containers)
+- Calls both `docker.list_containers()` and `docker.select_containers()` at request time (same two-step pattern as `post_update`)
 - Maps each container's labels to one of three states: `monitor_only` if `saurron.monitor-only=true`; `pinned` if `saurron.image-tag` contains a digest or `saurron.no-pull=true`; `running` otherwise
+- State precedence: `monitor_only` > `pinned` > `running`
+
+**Notes on `/v1/history` and `/v1/history/:id`:**
+- When pool is `None` (web UI disabled), return `503 Service Unavailable`
+
+**Notes on `/v1/health`:**
+- Extended fields (`updating`, `version`, `hostname`) are always present — not gated behind `--features web`
+- `updating`: `update_lock.try_lock().is_err()`
+- `version`: `env!("SAURRON_VERSION")`
+- `hostname`: `$HOSTNAME` env var, fallback to `/etc/hostname`, fallback to empty string
+
+**Notes on `GET /ui/*path`:**
+- Missing files return `404 Not Found` (no SPA fallback to `index.html`)
+- Empty path (`/ui/`) serves `index.html`
 
 **Files touched:** `src/http.rs` (new handlers + response types + route registration)
 
