@@ -86,7 +86,7 @@ Each milestone is one commit (or a small cluster of tightly coupled commits) on 
 
 ---
 
-### M4 — Rust: Backend API endpoints
+### M4 — Rust: Backend API endpoints ✓ DONE
 
 All new routes compiled only with `--features web`. No auth enforced in v1.
 
