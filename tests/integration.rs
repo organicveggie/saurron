@@ -362,16 +362,19 @@ async fn update_cycle_updates_stale_container() {
 
     // 5. Assert the container was updated.
     assert!(
-        report.containers.iter().any(|c| c.name == CONTAINER && c.outcome == ContainerOutcome::Updated),
+        report
+            .containers
+            .iter()
+            .any(|c| c.name == CONTAINER && c.outcome == ContainerOutcome::Updated),
         "expected '{CONTAINER}' in updated list, got: {:?}",
         report
     );
-    let failures: Vec<_> = report.containers.iter().filter(|c| c.outcome == ContainerOutcome::Failed).collect();
-    assert!(
-        failures.is_empty(),
-        "unexpected failures: {:?}",
-        failures
-    );
+    let failures: Vec<_> = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Failed)
+        .collect();
+    assert!(failures.is_empty(), "unexpected failures: {:?}", failures);
 
     // 6. Verify the running container image is now v1.1.0.
     let inspect = docker
