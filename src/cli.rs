@@ -288,6 +288,22 @@ pub struct Args {
     #[arg(long, env = "SAURRON_HTTP_API_ACCESS_LOG", value_name = "PATH")]
     pub http_api_access_log: Option<String>,
 
+    /// Enable web UI dashboard
+    #[cfg(feature = "web")]
+    #[arg(
+        long,
+        env = "SAURRON_HTTP_API_WEB_UI",
+        default_missing_value = "true",
+        num_args = 0..=1
+    )]
+    pub http_api_web_ui: Option<bool>,
+
+    // === Database ===
+    /// Path to SQLite database for web UI history (default: /etc/saurron/saurron.db)
+    #[cfg(feature = "web")]
+    #[arg(long, env = "SAURRON_DB_PATH", value_name = "PATH")]
+    pub db_path: Option<std::path::PathBuf>,
+
     // === Notifications — General ===
     /// Delay between cycle completion and notification dispatch (e.g. 30s)
     #[arg(long, env = "SAURRON_NOTIFICATION_DELAY", value_name = "DURATION")]

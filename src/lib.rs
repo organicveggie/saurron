@@ -1,6 +1,8 @@
 pub mod audit;
 pub mod cli;
 pub mod config;
+#[cfg(feature = "web")]
+pub mod db;
 pub mod docker;
 pub mod http;
 pub mod metrics;

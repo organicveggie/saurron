@@ -7,7 +7,7 @@ use saurron::{
     docker::{ContainerSelector, DockerClient},
     http::{AppStateInner, build_router},
     registry::{FreshnessResult, NonSemverStrategy, RegistryClient},
-    update::UpdateEngine,
+    update::{ContainerOutcome, UpdateEngine},
 };
 use testcontainers::{
     ContainerAsync, GenericImage,
@@ -205,7 +205,7 @@ async fn webhook_dispatch_posts_to_local_server() {
     use saurron::{
         config::WebhookConfig,
         notifications::{render_template, send_webhook},
-        update::SessionReport,
+        update::{ContainerReport, SessionReport},
     };
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -230,7 +230,12 @@ async fn webhook_dispatch_posts_to_local_server() {
     tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
     let report = SessionReport {
-        updated: vec!["nginx".to_string()],
+        containers: vec![ContainerReport {
+            name: "nginx".to_string(),
+            outcome: ContainerOutcome::Updated,
+            old_image: None,
+            new_image: None,
+        }],
         ..Default::default()
     };
     let body = render_template(&report, None).unwrap();
@@ -357,15 +362,19 @@ async fn update_cycle_updates_stale_container() {
 
     // 5. Assert the container was updated.
     assert!(
-        report.updated.contains(&CONTAINER.to_string()),
+        report
+            .containers
+            .iter()
+            .any(|c| c.name == CONTAINER && c.outcome == ContainerOutcome::Updated),
         "expected '{CONTAINER}' in updated list, got: {:?}",
         report
     );
-    assert!(
-        report.failed.is_empty(),
-        "unexpected failures: {:?}",
-        report.failed
-    );
+    let failures: Vec<_> = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Failed)
+        .collect();
+    assert!(failures.is_empty(), "unexpected failures: {:?}", failures);
 
     // 6. Verify the running container image is now v1.1.0.
     let inspect = docker
@@ -452,6 +461,8 @@ async fn post_update_via_http_records_scan_cycle_metric() {
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        #[cfg(feature = "web")]
+        pool: None,
     });
 
     let port = start_saurron_server(Arc::clone(&state)).await;
@@ -591,6 +602,8 @@ async fn post_update_via_http_dispatches_webhook_on_update() {
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        #[cfg(feature = "web")]
+        pool: None,
     });
 
     let saurron_port = start_saurron_server(Arc::clone(&state)).await;

@@ -34,6 +34,8 @@ pub struct Config {
     pub registry_credentials: Vec<RegistryCredential>,
     pub http_api: HttpApiConfig,
     pub notifications: NotificationsConfig,
+    #[cfg(feature = "web")]
+    pub db: DbConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -62,6 +64,14 @@ pub struct HttpApiConfig {
     pub port: u16,
     pub metrics_no_auth: bool,
     pub access_log: Option<String>,
+    #[cfg(feature = "web")]
+    pub web_ui: bool,
+}
+
+#[cfg(feature = "web")]
+#[derive(Debug, Clone)]
+pub struct DbConfig {
+    pub path: std::path::PathBuf,
 }
 
 #[derive(Debug, Clone)]
@@ -227,6 +237,8 @@ struct PartialConfig {
     rollback: Option<PartialRollbackConfig>,
     http_api: Option<PartialHttpApiConfig>,
     notifications: Option<PartialNotificationsConfig>,
+    #[cfg(feature = "web")]
+    db: Option<PartialDbConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -255,6 +267,14 @@ struct PartialHttpApiConfig {
     port: Option<u16>,
     metrics_no_auth: Option<bool>,
     access_log: Option<String>,
+    #[cfg(feature = "web")]
+    web_ui: Option<bool>,
+}
+
+#[cfg(feature = "web")]
+#[derive(Debug, Default, Deserialize)]
+struct PartialDbConfig {
+    path: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -391,6 +411,8 @@ impl Config {
         let ph = p.http_api.unwrap_or_default();
         let pn = p.notifications.unwrap_or_default();
         let pg = pn.general.unwrap_or_default();
+        #[cfg(feature = "web")]
+        let pdb = p.db.unwrap_or_default();
 
         // Rollback: --no-rollback-on-* flags explicitly set to false
         let on_exit_code = if args.no_rollback_on_exit_code {
@@ -630,6 +652,8 @@ impl Config {
                     .or(ph.metrics_no_auth)
                     .unwrap_or(false),
                 access_log: args.http_api_access_log.clone().or(ph.access_log),
+                #[cfg(feature = "web")]
+                web_ui: args.http_api_web_ui.or(ph.web_ui).unwrap_or(false),
             },
             notifications: NotificationsConfig {
                 general: GeneralNotifConfig {
@@ -648,6 +672,14 @@ impl Config {
                 email,
                 mqtt,
                 pushover,
+            },
+            #[cfg(feature = "web")]
+            db: DbConfig {
+                path: args
+                    .db_path
+                    .clone()
+                    .or_else(|| pdb.path.map(std::path::PathBuf::from))
+                    .unwrap_or_else(|| std::path::PathBuf::from("/etc/saurron/saurron.db")),
             },
         }
     }
@@ -761,6 +793,12 @@ impl Config {
             token = redact_opt(&self.http_api.token),
             access_log = self.http_api.access_log.as_deref().unwrap_or("<not set>"),
             "config: http_api"
+        );
+        #[cfg(feature = "web")]
+        info!(
+            web_ui = self.http_api.web_ui,
+            db_path = %self.db.path.display(),
+            "config: web"
         );
         info!(
             delay = %self.notifications.general.delay,

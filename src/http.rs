@@ -15,6 +15,11 @@ use tracing::{error, info};
 
 use crate::{config, docker, metrics, notifications, registry, update};
 
+const VERSION: &str = env!("SAURRON_VERSION");
+
+#[cfg(feature = "web")]
+use axum::extract::Path;
+
 pub struct AppStateInner {
     pub docker: docker::DockerClient,
     pub registry: registry::RegistryClient,
@@ -22,6 +27,8 @@ pub struct AppStateInner {
     pub selector: docker::ContainerSelector,
     /// Held for the duration of any update cycle. Scheduler: .lock().await; HTTP: .try_lock().
     pub update_lock: tokio::sync::Mutex<()>,
+    #[cfg(feature = "web")]
+    pub pool: Option<sqlx::SqlitePool>,
 }
 
 pub type AppState = Arc<AppStateInner>;
@@ -208,7 +215,8 @@ fn check_auth(headers: &HeaderMap, token: &str) -> bool {
 }
 
 /// Run a full enumeration + update cycle using the shared application state.
-pub async fn run_cycle_with_state(state: &AppStateInner) {
+#[cfg_attr(not(feature = "web"), allow(unused_variables))]
+pub async fn run_cycle_with_state(state: &AppStateInner, trigger: &str) {
     let all = match state.docker.list_containers(&state.selector).await {
         Ok(v) => v,
         Err(e) => {
@@ -222,10 +230,30 @@ pub async fn run_cycle_with_state(state: &AppStateInner) {
         .await;
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
+    #[cfg(feature = "web")]
+    if let Some(pool) = &state.pool {
+        if let Err(e) = crate::db::record_cycle(pool, &report, trigger).await {
+            error!(error = %e, trigger, "failed to persist cycle to database");
+        }
+    }
 }
 
-async fn health() -> impl IntoResponse {
-    (StatusCode::OK, Json(serde_json::json!({"status": "ok"})))
+async fn health(State(state): State<AppState>) -> impl IntoResponse {
+    let updating = state.update_lock.try_lock().is_err();
+    let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| {
+        std::fs::read_to_string("/etc/hostname")
+            .map(|s| s.trim().to_string())
+            .unwrap_or_default()
+    });
+    (
+        StatusCode::OK,
+        Json(serde_json::json!({
+            "status": "ok",
+            "updating": updating,
+            "version": VERSION,
+            "hostname": hostname,
+        })),
+    )
 }
 
 async fn post_update(
@@ -281,6 +309,12 @@ async fn post_update(
 
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
+    #[cfg(feature = "web")]
+    if let Some(pool) = &state.pool {
+        if let Err(e) = crate::db::record_cycle(pool, &report, "http_api").await {
+            error!(error = %e, trigger = "http_api", "failed to persist cycle to database");
+        }
+    }
 
     Json(report).into_response()
 }
@@ -381,6 +415,14 @@ pub fn build_router(state: AppState) -> axum::Router {
     if state.config.http_api.metrics {
         router = router.route("/v1/metrics", get(get_metrics));
     }
+    #[cfg(feature = "web")]
+    {
+        router = router
+            .route("/v1/history", get(get_history))
+            .route("/v1/history/{id}", get(get_history_by_id))
+            .route("/v1/containers", get(get_containers))
+            .route("/ui/{*path}", get(serve_static));
+    }
     let router = router.with_state(state);
     if has_access_log {
         router.layer(axum::middleware::from_fn(access_log_middleware))
@@ -407,6 +449,188 @@ pub async fn start_server(state: AppState) -> anyhow::Result<()> {
     .context("HTTP API server error")
 }
 
+#[cfg(feature = "web")]
+static WEB_DIR: include_dir::Dir<'static> = include_dir::include_dir!("web/dist");
+
+#[cfg(feature = "web")]
+#[derive(Debug, Deserialize)]
+struct HistoryQuery {
+    page: Option<i64>,
+    per_page: Option<i64>,
+}
+
+#[cfg(feature = "web")]
+#[derive(serde::Serialize)]
+struct CycleListItem {
+    id: i64,
+    started_at: String,
+    completed_at: String,
+    trigger: String,
+    updated: i64,
+    rolled_back: i64,
+    failed: i64,
+    skipped: i64,
+    up_to_date: i64,
+}
+
+#[cfg(feature = "web")]
+#[derive(serde::Serialize)]
+struct CycleContainerItem {
+    name: String,
+    old_image: Option<String>,
+    new_image: Option<String>,
+    outcome: String,
+}
+
+#[cfg(feature = "web")]
+#[derive(serde::Serialize)]
+struct ContainerListItem {
+    name: String,
+    state: &'static str,
+}
+
+#[cfg(feature = "web")]
+fn container_state(labels: &docker::SaurronLabels) -> &'static str {
+    if labels.monitor_only == Some(true) {
+        return "monitor_only";
+    }
+    if labels.no_pull == Some(true)
+        || labels
+            .image_tag
+            .as_deref()
+            .is_some_and(|t| t.contains("sha256:"))
+    {
+        return "pinned";
+    }
+    "running"
+}
+
+#[cfg(feature = "web")]
+fn mime_type(path: &str) -> &'static str {
+    match path.rsplit_once('.').map(|(_, ext)| ext) {
+        Some("html") => "text/html; charset=utf-8",
+        Some("js") | Some("mjs") => "application/javascript",
+        Some("css") => "text/css",
+        Some("json") => "application/json",
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("woff2") => "font/woff2",
+        Some("woff") => "font/woff",
+        Some("ttf") => "font/ttf",
+        _ => "application/octet-stream",
+    }
+}
+
+#[cfg(feature = "web")]
+async fn get_history(State(state): State<AppState>, Query(query): Query<HistoryQuery>) -> Response {
+    let Some(pool) = &state.pool else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(20).max(1);
+    match crate::db::list_cycles(pool, page, per_page).await {
+        Ok((rows, total)) => {
+            let cycles: Vec<CycleListItem> = rows
+                .into_iter()
+                .map(|r| CycleListItem {
+                    id: r.id,
+                    started_at: r.started_at,
+                    completed_at: r.completed_at,
+                    trigger: r.trigger,
+                    updated: r.updated,
+                    rolled_back: r.rolled_back,
+                    failed: r.failed,
+                    skipped: r.skipped,
+                    up_to_date: r.up_to_date,
+                })
+                .collect();
+            Json(serde_json::json!({ "cycles": cycles, "total": total })).into_response()
+        }
+        Err(e) => {
+            error!(error = %e, "failed to list cycles");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[cfg(feature = "web")]
+async fn get_history_by_id(State(state): State<AppState>, Path(id): Path<i64>) -> Response {
+    let Some(pool) = &state.pool else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    match crate::db::get_cycle(pool, id).await {
+        Ok(Some((cycle, containers))) => {
+            let cycle_item = CycleListItem {
+                id: cycle.id,
+                started_at: cycle.started_at,
+                completed_at: cycle.completed_at,
+                trigger: cycle.trigger,
+                updated: cycle.updated,
+                rolled_back: cycle.rolled_back,
+                failed: cycle.failed,
+                skipped: cycle.skipped,
+                up_to_date: cycle.up_to_date,
+            };
+            let container_items: Vec<CycleContainerItem> = containers
+                .into_iter()
+                .map(|c| CycleContainerItem {
+                    name: c.name,
+                    old_image: c.old_image,
+                    new_image: c.new_image,
+                    outcome: c.outcome,
+                })
+                .collect();
+            Json(serde_json::json!({
+                "cycle": cycle_item,
+                "containers": container_items,
+            }))
+            .into_response()
+        }
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => {
+            error!(error = %e, id, "failed to fetch cycle");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[cfg(feature = "web")]
+async fn get_containers(State(state): State<AppState>) -> Response {
+    match state.docker.list_containers(&state.selector).await {
+        Ok(all) => {
+            let selected = state.docker.select_containers(&all, &state.selector);
+            let items: Vec<ContainerListItem> = selected
+                .iter()
+                .map(|c| ContainerListItem {
+                    name: c.name.clone(),
+                    state: container_state(&c.saurron_labels()),
+                })
+                .collect();
+            Json(items).into_response()
+        }
+        Err(e) => {
+            error!(error = %e, "failed to list containers for /v1/containers");
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+#[cfg(feature = "web")]
+async fn serve_static(Path(path): Path<String>) -> Response {
+    let path = path.trim_start_matches('/');
+    let lookup = if path.is_empty() { "index.html" } else { path };
+    match WEB_DIR.get_file(lookup) {
+        Some(file) => axum::http::Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, mime_type(lookup))
+            .body(axum::body::Body::from(file.contents().to_vec()))
+            .unwrap(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,6 +648,8 @@ mod tests {
             port: 8080,
             metrics_no_auth,
             access_log: None,
+            #[cfg(feature = "web")]
+            web_ui: false,
         }
     }
 
@@ -685,5 +911,128 @@ mod tests {
         let (c, i) = resolve_update_filters(&query(None, None), None).unwrap();
         assert!(c.is_none());
         assert!(i.is_none());
+    }
+
+    // ── container_state ───────────────────────────────────────────────────────
+
+    #[cfg(feature = "web")]
+    fn labels_with(
+        monitor_only: Option<bool>,
+        no_pull: Option<bool>,
+        image_tag: Option<&str>,
+    ) -> docker::SaurronLabels {
+        docker::SaurronLabels {
+            monitor_only,
+            no_pull,
+            image_tag: image_tag.map(String::from),
+            ..Default::default()
+        }
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn container_state_no_labels_is_running() {
+        assert_eq!(container_state(&labels_with(None, None, None)), "running");
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn container_state_monitor_only_true() {
+        assert_eq!(
+            container_state(&labels_with(Some(true), None, None)),
+            "monitor_only"
+        );
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn container_state_no_pull_is_pinned() {
+        assert_eq!(
+            container_state(&labels_with(None, Some(true), None)),
+            "pinned"
+        );
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn container_state_image_tag_digest_is_pinned() {
+        assert_eq!(
+            container_state(&labels_with(None, None, Some("sha256:abc123def456"))),
+            "pinned"
+        );
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn container_state_image_tag_plain_tag_is_running() {
+        assert_eq!(
+            container_state(&labels_with(None, None, Some("latest"))),
+            "running"
+        );
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn container_state_monitor_only_takes_precedence_over_pinned() {
+        assert_eq!(
+            container_state(&labels_with(Some(true), Some(true), None)),
+            "monitor_only"
+        );
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn container_state_monitor_only_false_no_pull_is_pinned() {
+        assert_eq!(
+            container_state(&labels_with(Some(false), Some(true), None)),
+            "pinned"
+        );
+    }
+
+    // ── mime_type ─────────────────────────────────────────────────────────────
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn mime_type_html() {
+        assert_eq!(mime_type("index.html"), "text/html; charset=utf-8");
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn mime_type_js() {
+        assert_eq!(mime_type("app.js"), "application/javascript");
+        assert_eq!(mime_type("module.mjs"), "application/javascript");
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn mime_type_css() {
+        assert_eq!(mime_type("styles.css"), "text/css");
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn mime_type_svg() {
+        assert_eq!(mime_type("logo.svg"), "image/svg+xml");
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn mime_type_woff2() {
+        assert_eq!(mime_type("font.woff2"), "font/woff2");
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn mime_type_hashed_asset_uses_extension() {
+        assert_eq!(mime_type("assets/main.abc123.js"), "application/javascript");
+        assert_eq!(mime_type("assets/style.abc123.css"), "text/css");
+    }
+
+    #[cfg(feature = "web")]
+    #[test]
+    fn mime_type_unknown_extension_is_octet_stream() {
+        assert_eq!(mime_type("file.xyz"), "application/octet-stream");
+        assert_eq!(mime_type("no-extension"), "application/octet-stream");
     }
 }

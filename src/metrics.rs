@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use prometheus::{IntCounter, register_int_counter};
 
-use crate::update::SessionReport;
+use crate::update::{ContainerOutcome, SessionReport};
 
 // ── Metric definitions ────────────────────────────────────────────────────────
 
@@ -51,14 +51,21 @@ static CONTAINERS_FAILED: LazyLock<IntCounter> = LazyLock::new(|| {
 /// Record the outcome of a completed update cycle.
 pub fn record_cycle(report: &SessionReport) {
     SCAN_CYCLES.inc();
-    let scanned = (report.updated.len()
-        + report.skipped.len()
-        + report.failed.len()
-        + report.rolled_back.len()
-        + report.up_to_date) as u64;
-    CONTAINERS_SCANNED.inc_by(scanned);
-    CONTAINERS_UPDATED.inc_by(report.updated.len() as u64);
-    CONTAINERS_FAILED.inc_by(report.failed.len() as u64);
+    CONTAINERS_SCANNED.inc_by(report.containers.len() as u64);
+    CONTAINERS_UPDATED.inc_by(
+        report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::Updated)
+            .count() as u64,
+    );
+    CONTAINERS_FAILED.inc_by(
+        report
+            .containers
+            .iter()
+            .filter(|c| c.outcome == ContainerOutcome::Failed)
+            .count() as u64,
+    );
 }
 
 /// Record a cycle that was skipped because another cycle was already running.
@@ -71,7 +78,7 @@ pub fn record_skipped_cycle() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::update::SessionReport;
+    use crate::update::{ContainerOutcome, ContainerReport, SessionReport};
     use std::sync::Mutex;
 
     // Serialise all metric tests: the prometheus counters are process-global, so
@@ -109,17 +116,28 @@ mod tests {
         let before_updated = CONTAINERS_UPDATED.get();
         let before_failed = CONTAINERS_FAILED.get();
 
+        let make = |name: &str, outcome: ContainerOutcome| ContainerReport {
+            name: name.to_string(),
+            outcome,
+            old_image: None,
+            new_image: None,
+        };
         let report = SessionReport {
-            updated: vec!["a".to_string(), "b".to_string()],
-            skipped: vec!["c".to_string()],
-            failed: vec!["d".to_string()],
-            rolled_back: vec![],
-            up_to_date: 3,
+            containers: vec![
+                make("a", ContainerOutcome::Updated),
+                make("b", ContainerOutcome::Updated),
+                make("c", ContainerOutcome::Skipped),
+                make("d", ContainerOutcome::Failed),
+                make("e", ContainerOutcome::UpToDate),
+                make("f", ContainerOutcome::UpToDate),
+                make("g", ContainerOutcome::UpToDate),
+            ],
+            ..Default::default()
         };
         record_cycle(&report);
 
         assert_eq!(SCAN_CYCLES.get() - before_cycles, 1);
-        assert_eq!(CONTAINERS_SCANNED.get() - before_scanned, 7); // 2+1+1+0+3
+        assert_eq!(CONTAINERS_SCANNED.get() - before_scanned, 7);
         assert_eq!(CONTAINERS_UPDATED.get() - before_updated, 2);
         assert_eq!(CONTAINERS_FAILED.get() - before_failed, 1);
     }
@@ -130,7 +148,12 @@ mod tests {
         let before_scanned = CONTAINERS_SCANNED.get();
 
         let report = SessionReport {
-            rolled_back: vec!["x".to_string()],
+            containers: vec![ContainerReport {
+                name: "x".to_string(),
+                outcome: ContainerOutcome::RolledBack,
+                old_image: None,
+                new_image: None,
+            }],
             ..Default::default()
         };
         record_cycle(&report);

@@ -3,7 +3,7 @@ use tracing::{error, info};
 
 use crate::{
     config::{EmailConfig, MqttConfig, NotificationsConfig, PushoverConfig, WebhookConfig},
-    update::{SessionReport, parse_duration_secs},
+    update::{ContainerOutcome, SessionReport, parse_duration_secs},
 };
 
 const DEFAULT_TEMPLATE: &str = r#"Saurron update report:
@@ -15,13 +15,48 @@ Up to date: {{ up_to_date }}"#;
 
 /// Returns true when the cycle produced at least one update, failure, or rollback.
 pub fn should_notify(report: &SessionReport) -> bool {
-    !report.updated.is_empty() || !report.failed.is_empty() || !report.rolled_back.is_empty()
+    report.containers.iter().any(|c| {
+        matches!(
+            c.outcome,
+            ContainerOutcome::Updated | ContainerOutcome::Failed | ContainerOutcome::RolledBack
+        )
+    })
 }
 
 /// Render the notification body using minijinja.
 /// Uses `DEFAULT_TEMPLATE` when `template` is `None`.
 pub fn render_template(report: &SessionReport, template: Option<&str>) -> Result<String> {
     use minijinja::{Environment, context};
+
+    let updated: Vec<&str> = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Updated)
+        .map(|c| c.name.as_str())
+        .collect();
+    let skipped: Vec<&str> = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Skipped)
+        .map(|c| c.name.as_str())
+        .collect();
+    let failed: Vec<&str> = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::Failed)
+        .map(|c| c.name.as_str())
+        .collect();
+    let rolled_back: Vec<&str> = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::RolledBack)
+        .map(|c| c.name.as_str())
+        .collect();
+    let up_to_date = report
+        .containers
+        .iter()
+        .filter(|c| c.outcome == ContainerOutcome::UpToDate)
+        .count();
 
     let template_str = template.unwrap_or(DEFAULT_TEMPLATE);
     let mut env = Environment::new();
@@ -30,11 +65,12 @@ pub fn render_template(report: &SessionReport, template: Option<&str>) -> Result
     env.get_template("t")
         .unwrap()
         .render(context! {
-            updated    => &report.updated,
-            skipped    => &report.skipped,
-            failed     => &report.failed,
-            rolled_back => &report.rolled_back,
-            up_to_date => report.up_to_date,
+            updated,
+            skipped,
+            failed,
+            rolled_back,
+            up_to_date,
+            containers => &report.containers,
         })
         .context("notification template rendering failed")
 }
@@ -474,15 +510,27 @@ pub async fn send_pushover(cfg: &PushoverConfig, body: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::update::SessionReport;
+    use crate::update::{ContainerOutcome, ContainerReport, SessionReport};
+
+    fn make_container_report(name: &str, outcome: ContainerOutcome) -> ContainerReport {
+        ContainerReport {
+            name: name.to_string(),
+            outcome,
+            old_image: Some("img:old".to_string()),
+            new_image: None,
+        }
+    }
 
     fn report_with_updates() -> SessionReport {
         SessionReport {
-            updated: vec!["nginx".to_string(), "redis".to_string()],
-            skipped: vec![],
-            failed: vec![],
-            rolled_back: vec![],
-            up_to_date: 3,
+            containers: vec![
+                make_container_report("nginx", ContainerOutcome::Updated),
+                make_container_report("redis", ContainerOutcome::Updated),
+                make_container_report("db", ContainerOutcome::UpToDate),
+                make_container_report("proxy", ContainerOutcome::UpToDate),
+                make_container_report("cache", ContainerOutcome::UpToDate),
+            ],
+            ..Default::default()
         }
     }
 
@@ -566,7 +614,7 @@ mod tests {
     #[test]
     fn should_notify_updated_nonempty() {
         let r = SessionReport {
-            updated: vec!["app".to_string()],
+            containers: vec![make_container_report("app", ContainerOutcome::Updated)],
             ..Default::default()
         };
         assert!(should_notify(&r));
@@ -575,7 +623,7 @@ mod tests {
     #[test]
     fn should_notify_failed_nonempty() {
         let r = SessionReport {
-            failed: vec!["app".to_string()],
+            containers: vec![make_container_report("app", ContainerOutcome::Failed)],
             ..Default::default()
         };
         assert!(should_notify(&r));
@@ -584,7 +632,7 @@ mod tests {
     #[test]
     fn should_notify_rolled_back_nonempty() {
         let r = SessionReport {
-            rolled_back: vec!["app".to_string()],
+            containers: vec![make_container_report("app", ContainerOutcome::RolledBack)],
             ..Default::default()
         };
         assert!(should_notify(&r));
@@ -593,7 +641,7 @@ mod tests {
     #[test]
     fn should_notify_skipped_only_is_false() {
         let r = SessionReport {
-            skipped: vec!["app".to_string()],
+            containers: vec![make_container_report("app", ContainerOutcome::Skipped)],
             ..Default::default()
         };
         assert!(!should_notify(&r));
@@ -602,7 +650,10 @@ mod tests {
     #[test]
     fn should_notify_all_up_to_date_is_false() {
         let r = SessionReport {
-            up_to_date: 5,
+            containers: vec![
+                make_container_report("a", ContainerOutcome::UpToDate),
+                make_container_report("b", ContainerOutcome::UpToDate),
+            ],
             ..Default::default()
         };
         assert!(!should_notify(&r));
@@ -740,7 +791,9 @@ mod tests {
         };
         // All-up-to-date report — should_notify returns false, dispatch is a no-op.
         let report = SessionReport {
-            up_to_date: 10,
+            containers: (0..10)
+                .map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate))
+                .collect(),
             ..Default::default()
         };
         dispatch(&config, &report).await; // must not panic or block
@@ -825,7 +878,9 @@ mod tests {
         // All-up-to-date report: should_notify returns false, but notify_on_every_cycle
         // overrides the early return. No targets configured, so dispatch completes cleanly.
         let report = SessionReport {
-            up_to_date: 5,
+            containers: (0..5)
+                .map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate))
+                .collect(),
             ..Default::default()
         };
         dispatch(&config, &report).await; // must not return early; must not panic
@@ -849,7 +904,9 @@ mod tests {
             pushover: None,
         };
         let report = SessionReport {
-            up_to_date: 5,
+            containers: (0..5)
+                .map(|i| make_container_report(&format!("c{i}"), ContainerOutcome::UpToDate))
+                .collect(),
             ..Default::default()
         };
         dispatch(&config, &report).await; // returns early; must not panic
