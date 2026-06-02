@@ -1,0 +1,27 @@
+{
+  "name": "saurron-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@smui/button": "^9.0.0",
+    "@smui/card": "^9.0.0",
+    "@smui/data-table": "^9.0.0",
+    "@smui/drawer": "^9.0.0",
+    "@smui/linear-progress": "^9.0.0",
+    "@smui/snackbar": "^9.0.0",
+    "@smui/textfield": "^9.0.0",
+    "material-symbols": "*",
+    "svelte": "^5.0.0",
+    "svelte-spa-router": "^5.0.0"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
+    "vite": "^6.0.0"
+  }
+}

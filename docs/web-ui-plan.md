@@ -126,7 +126,7 @@ All new routes compiled only with `--features web`. No auth enforced in v1.
 
 ---
 
-### M5 — Frontend: Scaffold
+### M5 — Frontend: Scaffold ✓ DONE
 
 `web/` directory at repo root. Independent of Rust build.
 

@@ -1,0 +1,347 @@
+/* Flash-prevention: background applied before .saurron-app mounts */
+html[data-theme="dark"]  { background: oklch(0.16 0.012 55); color-scheme: dark; }
+html[data-theme="light"] { background: oklch(0.985 0.012 55); color-scheme: light; }
+
+.saurron-app {
+  /* Saurron accent — hue 55 (amber-gold), chroma 0.15 */
+  --p-h: 55;
+  --p-c: 0.15;
+  --n-c: 0.012;
+
+  --font-display: "Inter", "Roboto Flex", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: "Inter", "Roboto Flex", "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  /* Shape */
+  --r-xs: 4px;
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 24px;
+  --r-full: 999px;
+
+  /* Elevation (MD3 — surface tonals + shadow combo) */
+  --e1: 0 1px 2px rgba(0,0,0,0.18), 0 1px 3px rgba(0,0,0,0.12);
+  --e2: 0 1px 2px rgba(0,0,0,0.20), 0 2px 6px rgba(0,0,0,0.14);
+  --e3: 0 4px 8px rgba(0,0,0,0.22), 0 1px 3px rgba(0,0,0,0.14);
+
+  /* Semantic outcome hues (independent of accent — chips stay readable across themes) */
+  --hue-success: 145;
+  --hue-warning: 75;
+  --hue-error:   25;
+  --hue-info:    230;
+}
+
+/* ============================================================
+   DARK THEME
+   ============================================================ */
+.saurron-app[data-theme="dark"] {
+  --bg:                          oklch(0.16 var(--n-c) var(--p-h));
+  --surface:                     oklch(0.18 var(--n-c) var(--p-h));
+  --surface-dim:                 oklch(0.15 var(--n-c) var(--p-h));
+  --surface-bright:              oklch(0.30 var(--n-c) var(--p-h));
+  --sc-lowest:                   oklch(0.12 var(--n-c) var(--p-h));
+  --sc-low:                      oklch(0.20 var(--n-c) var(--p-h));
+  --sc:                          oklch(0.23 var(--n-c) var(--p-h));
+  --sc-high:                     oklch(0.27 var(--n-c) var(--p-h));
+  --sc-highest:                  oklch(0.32 var(--n-c) var(--p-h));
+
+  --on-surface:                  oklch(0.94 var(--n-c) var(--p-h));
+  --on-surface-variant:          oklch(0.78 var(--n-c) var(--p-h));
+  --on-surface-muted:            oklch(0.62 var(--n-c) var(--p-h));
+  --outline:                     oklch(0.55 var(--n-c) var(--p-h));
+  --outline-variant:             oklch(0.32 var(--n-c) var(--p-h));
+
+  --primary:                     oklch(0.82 var(--p-c) var(--p-h));
+  --on-primary:                  oklch(0.22 var(--p-c) var(--p-h));
+  --primary-container:           oklch(0.40 var(--p-c) var(--p-h));
+  --on-primary-container:        oklch(0.94 calc(var(--p-c) * 0.55) var(--p-h));
+  --primary-soft:                color-mix(in oklch, var(--primary) 14%, transparent);
+
+  --secondary:                   oklch(0.80 calc(var(--p-c) * 0.35) var(--p-h));
+  --secondary-container:         oklch(0.32 calc(var(--p-c) * 0.35) var(--p-h));
+  --on-secondary-container:      oklch(0.90 calc(var(--p-c) * 0.35) var(--p-h));
+
+  --tertiary:                    oklch(0.80 calc(var(--p-c) * 0.7) calc(var(--p-h) + 140));
+  --tertiary-container:          oklch(0.36 calc(var(--p-c) * 0.7) calc(var(--p-h) + 140));
+  --on-tertiary-container:       oklch(0.94 calc(var(--p-c) * 0.4) calc(var(--p-h) + 140));
+
+  --success:                     oklch(0.78 0.14 var(--hue-success));
+  --on-success:                  oklch(0.20 0.10 var(--hue-success));
+  --success-container:           oklch(0.32 0.10 var(--hue-success));
+  --on-success-container:        oklch(0.92 0.08 var(--hue-success));
+  --success-soft:                color-mix(in oklch, var(--success) 16%, transparent);
+
+  --warning:                     oklch(0.82 0.15 var(--hue-warning));
+  --on-warning:                  oklch(0.22 0.10 var(--hue-warning));
+  --warning-container:           oklch(0.34 0.11 var(--hue-warning));
+  --on-warning-container:        oklch(0.93 0.10 var(--hue-warning));
+  --warning-soft:                color-mix(in oklch, var(--warning) 16%, transparent);
+
+  --error:                       oklch(0.74 0.17 var(--hue-error));
+  --on-error:                    oklch(0.20 0.10 var(--hue-error));
+  --error-container:             oklch(0.34 0.13 var(--hue-error));
+  --on-error-container:          oklch(0.94 0.08 var(--hue-error));
+  --error-soft:                  color-mix(in oklch, var(--error) 18%, transparent);
+
+  --neutral:                     oklch(0.70 var(--n-c) var(--p-h));
+  --neutral-container:           oklch(0.28 var(--n-c) var(--p-h));
+  --on-neutral-container:        oklch(0.86 var(--n-c) var(--p-h));
+
+  --info:                        oklch(0.78 0.10 var(--hue-info));
+  --info-container:              oklch(0.32 0.10 var(--hue-info));
+
+  --hover:      color-mix(in oklch, var(--on-surface) 6%, transparent);
+  --pressed:    color-mix(in oklch, var(--on-surface) 12%, transparent);
+  --focus-ring: color-mix(in oklch, var(--primary) 35%, transparent);
+
+  color-scheme: dark;
+}
+
+/* ============================================================
+   LIGHT THEME
+   ============================================================ */
+.saurron-app[data-theme="light"] {
+  --bg:                          oklch(0.985 var(--n-c) var(--p-h));
+  --surface:                     oklch(0.99 var(--n-c) var(--p-h));
+  --surface-dim:                 oklch(0.92 var(--n-c) var(--p-h));
+  --surface-bright:              oklch(1 var(--n-c) var(--p-h));
+  --sc-lowest:                   oklch(1 0 0);
+  --sc-low:                      oklch(0.975 var(--n-c) var(--p-h));
+  --sc:                          oklch(0.955 var(--n-c) var(--p-h));
+  --sc-high:                     oklch(0.93 var(--n-c) var(--p-h));
+  --sc-highest:                  oklch(0.91 var(--n-c) var(--p-h));
+
+  --on-surface:                  oklch(0.18 var(--n-c) var(--p-h));
+  --on-surface-variant:          oklch(0.36 var(--n-c) var(--p-h));
+  --on-surface-muted:            oklch(0.55 var(--n-c) var(--p-h));
+  --outline:                     oklch(0.62 var(--n-c) var(--p-h));
+  --outline-variant:             oklch(0.82 var(--n-c) var(--p-h));
+
+  --primary:                     oklch(0.55 calc(var(--p-c) * 1.05) var(--p-h));
+  --on-primary:                  oklch(1 0 0);
+  --primary-container:           oklch(0.92 calc(var(--p-c) * 0.55) var(--p-h));
+  --on-primary-container:        oklch(0.22 var(--p-c) var(--p-h));
+  --primary-soft:                color-mix(in oklch, var(--primary) 10%, transparent);
+
+  --secondary:                   oklch(0.50 calc(var(--p-c) * 0.45) var(--p-h));
+  --secondary-container:         oklch(0.90 calc(var(--p-c) * 0.3) var(--p-h));
+  --on-secondary-container:      oklch(0.24 calc(var(--p-c) * 0.45) var(--p-h));
+
+  --tertiary:                    oklch(0.55 calc(var(--p-c) * 0.7) calc(var(--p-h) + 140));
+  --tertiary-container:          oklch(0.91 calc(var(--p-c) * 0.4) calc(var(--p-h) + 140));
+  --on-tertiary-container:       oklch(0.26 calc(var(--p-c) * 0.7) calc(var(--p-h) + 140));
+
+  --success:                     oklch(0.52 0.14 var(--hue-success));
+  --on-success:                  oklch(1 0 0);
+  --success-container:           oklch(0.90 0.10 var(--hue-success));
+  --on-success-container:        oklch(0.26 0.12 var(--hue-success));
+  --success-soft:                color-mix(in oklch, var(--success) 12%, transparent);
+
+  --warning:                     oklch(0.62 0.14 var(--hue-warning));
+  --on-warning:                  oklch(0.20 0.10 var(--hue-warning));
+  --warning-container:           oklch(0.92 0.11 var(--hue-warning));
+  --on-warning-container:        oklch(0.28 0.13 var(--hue-warning));
+  --warning-soft:                color-mix(in oklch, var(--warning) 14%, transparent);
+
+  --error:                       oklch(0.55 0.18 var(--hue-error));
+  --on-error:                    oklch(1 0 0);
+  --error-container:             oklch(0.92 0.08 var(--hue-error));
+  --on-error-container:          oklch(0.28 0.16 var(--hue-error));
+  --error-soft:                  color-mix(in oklch, var(--error) 12%, transparent);
+
+  --neutral:                     oklch(0.48 var(--n-c) var(--p-h));
+  --neutral-container:           oklch(0.92 var(--n-c) var(--p-h));
+  --on-neutral-container:        oklch(0.28 var(--n-c) var(--p-h));
+
+  --info:                        oklch(0.52 0.12 var(--hue-info));
+  --info-container:              oklch(0.92 0.08 var(--hue-info));
+
+  --hover:      color-mix(in oklch, var(--on-surface) 5%, transparent);
+  --pressed:    color-mix(in oklch, var(--on-surface) 10%, transparent);
+  --focus-ring: color-mix(in oklch, var(--primary) 30%, transparent);
+
+  color-scheme: light;
+}
+
+/* ============================================================
+   PRIMITIVES
+   ============================================================ */
+.saurron-app {
+  font-family: var(--font-body);
+  background: var(--bg);
+  color: var(--on-surface);
+  font-size: 14px;
+  line-height: 1.4;
+  min-height: 100dvh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+.saurron-app * { box-sizing: border-box; }
+.saurron-app button { font-family: inherit; }
+
+body { margin: 0; }
+
+/* Material Symbols */
+.saurron-app .ms {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  display: inline-block;
+  line-height: 1;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+}
+.saurron-app .ms.fill { font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+
+/* Chip */
+.saurron-app .chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 10px;
+  border-radius: var(--r-sm);
+  font-size: 12px; font-weight: 500;
+  letter-spacing: 0.02em;
+  background: var(--sc-high);
+  color: var(--on-surface);
+  white-space: nowrap;
+}
+.saurron-app .chip .ms { font-size: 14px; }
+.saurron-app .chip.success  { background: var(--success-container); color: var(--on-success-container); }
+.saurron-app .chip.warning  { background: var(--warning-container); color: var(--on-warning-container); }
+.saurron-app .chip.error    { background: var(--error-container);   color: var(--on-error-container); }
+.saurron-app .chip.neutral  { background: var(--neutral-container); color: var(--on-neutral-container); }
+.saurron-app .chip.primary  { background: var(--primary-container); color: var(--on-primary-container); }
+.saurron-app .chip.outlined { background: transparent; box-shadow: inset 0 0 0 1px var(--outline-variant); color: var(--on-surface-variant); }
+
+/* Buttons (MD3) */
+.saurron-app .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 24px;
+  border-radius: var(--r-full);
+  border: none;
+  font-family: inherit; font-size: 14px; font-weight: 500;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background .15s, box-shadow .15s, color .15s, opacity .15s;
+  white-space: nowrap;
+}
+.saurron-app .btn.filled         { background: var(--primary); color: var(--on-primary); }
+.saurron-app .btn.filled:hover   { background: color-mix(in oklch, var(--primary) 92%, var(--on-primary) 8%); box-shadow: var(--e1); }
+.saurron-app .btn.tonal          { background: var(--secondary-container); color: var(--on-secondary-container); }
+.saurron-app .btn.tonal:hover    { background: color-mix(in oklch, var(--secondary-container) 88%, var(--on-secondary-container) 12%); }
+.saurron-app .btn.outlined       { background: transparent; box-shadow: inset 0 0 0 1px var(--outline); color: var(--primary); }
+.saurron-app .btn.outlined:hover { background: var(--primary-soft); }
+.saurron-app .btn.text           { background: transparent; color: var(--primary); padding: 0 12px; }
+.saurron-app .btn.text:hover     { background: var(--primary-soft); }
+.saurron-app .btn.icon           { width: 40px; height: 40px; padding: 0; border-radius: var(--r-full); background: transparent; color: var(--on-surface-variant); }
+.saurron-app .btn.icon:hover     { background: var(--hover); color: var(--on-surface); }
+.saurron-app .btn.icon.small     { width: 32px; height: 32px; }
+.saurron-app .btn.icon.small .ms { font-size: 18px; }
+.saurron-app .btn .ms            { font-size: 18px; }
+
+/* Card */
+.saurron-app .card          { background: var(--sc-low); border-radius: var(--r-lg); overflow: hidden; }
+.saurron-app .card.outlined { background: var(--surface); box-shadow: inset 0 0 0 1px var(--outline-variant); }
+.saurron-app .card.elevated { background: var(--sc); box-shadow: var(--e1); }
+
+/* Divider */
+.saurron-app .divider  { height: 1px; background: var(--outline-variant); border: 0; margin: 0; }
+.saurron-app .vdivider { width: 1px; background: var(--outline-variant); align-self: stretch; }
+
+/* kbd */
+.saurron-app kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: var(--r-xs);
+  background: var(--sc-high);
+  color: var(--on-surface-variant);
+  box-shadow: inset 0 0 0 1px var(--outline-variant);
+}
+
+/* Scrollbars */
+.saurron-app *::-webkit-scrollbar       { width: 8px; height: 8px; }
+.saurron-app *::-webkit-scrollbar-thumb { background: var(--outline-variant); border-radius: 999px; }
+.saurron-app *::-webkit-scrollbar-track { background: transparent; }
+
+/* Type scale (MD3-ish) */
+.saurron-app .type-display  { font-size: 32px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.15; }
+.saurron-app .type-h1       { font-size: 22px; font-weight: 500; letter-spacing: -0.005em; line-height: 1.2; }
+.saurron-app .type-h2       { font-size: 18px; font-weight: 500; line-height: 1.3; }
+.saurron-app .type-h3       { font-size: 15px; font-weight: 600; line-height: 1.3; }
+.saurron-app .type-title    { font-size: 14px; font-weight: 600; line-height: 1.3; letter-spacing: 0.005em; }
+.saurron-app .type-body     { font-size: 14px; font-weight: 400; line-height: 1.45; }
+.saurron-app .type-body-sm  { font-size: 13px; font-weight: 400; line-height: 1.4; }
+.saurron-app .type-label    { font-size: 12px; font-weight: 500; line-height: 1.3; letter-spacing: 0.04em; }
+.saurron-app .type-overline { font-size: 11px; font-weight: 600; line-height: 1.3; letter-spacing: 0.08em; text-transform: uppercase; color: var(--on-surface-muted); }
+.saurron-app .type-mono     { font-family: var(--font-mono); font-size: 12px; }
+.saurron-app .type-num      { font-variant-numeric: tabular-nums; }
+
+/* ============================================================
+   Cycle-running indicators
+   ============================================================ */
+@keyframes saurron-indeterminate {
+  0%   { transform: translateX(-100%); }
+  60%  { transform: translateX(180%); }
+  100% { transform: translateX(180%); }
+}
+@keyframes saurron-pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: .45; transform: scale(0.78); }
+}
+@keyframes saurron-spin {
+  to { transform: rotate(360deg); }
+}
+
+.saurron-app .running-dot {
+  width: 8px; height: 8px; border-radius: 999px;
+  background: var(--primary);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--primary) 60%, transparent);
+  animation: saurron-pulse-dot 1.4s ease-in-out infinite;
+}
+
+.saurron-app .running-bar {
+  position: relative;
+  height: 4px; width: 100%;
+  background: var(--primary-soft);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.saurron-app .running-bar::after {
+  content: '';
+  position: absolute; inset: 0;
+  width: 55%;
+  background: var(--primary);
+  border-radius: 999px;
+  animation: saurron-indeterminate 1.6s cubic-bezier(.65,.05,.36,1) infinite;
+}
+.saurron-app .running-bar.thin       { height: 2px; }
+.saurron-app .running-bar.thin::after { border-radius: 0; }
+
+.saurron-app .running-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 9px 0 8px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--primary-soft);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--primary) 35%, transparent);
+}
+.saurron-app .running-chip.idle {
+  background: transparent;
+  color: var(--on-surface-muted);
+  box-shadow: inset 0 0 0 1px var(--outline-variant);
+}
+.saurron-app .running-chip .dot {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: currentColor;
+}
+.saurron-app .running-chip.live .dot { animation: saurron-pulse-dot 1.4s ease-in-out infinite; }
