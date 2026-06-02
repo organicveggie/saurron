@@ -1,0 +1,47 @@
+name: Web Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/src/**/*.svelte'
+      - 'web/src/**/*.js'
+      - 'web/eslint.config.js'
+      - 'web/package.json'
+      - 'web/pnpm-lock.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/src/**/*.svelte'
+      - 'web/src/**/*.js'
+      - 'web/eslint.config.js'
+      - 'web/package.json'
+      - 'web/pnpm-lock.yaml'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
