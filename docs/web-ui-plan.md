@@ -126,19 +126,31 @@ All new routes compiled only with `--features web`. No auth enforced in v1.
 
 ---
 
-### M5 — Frontend: Scaffold
+### M5 — Frontend: Scaffold ✓ DONE
 
 `web/` directory at repo root. Independent of Rust build.
 
-- `web/package.json`: `svelte`, `vite`, `@sveltejs/vite-plugin-svelte`, `svelte-spa-router`, `@smui/button`, `@smui/card`, `@smui/data-table`, `@smui/drawer`, `@smui/linear-progress`, `@smui/snackbar`, `@smui/textfield`, `material-symbols`
-- `web/vite.config.js`: Svelte plugin + dev proxy (`/v1` → `http://localhost:8080`)
-- `web/index.html`: base HTML; inline script applies `data-theme` from `localStorage` before first paint to avoid theme flash
-- `web/src/tokens.css`: port of `design/dashboard/project/saurron-tokens.css` — Saurron accent only; light + dark themes; all primitives (shape, elevation, type scale, chips, buttons, cards, running indicators)
-- `web/src/App.svelte`: router shell, theme store initialisation, `svelte-spa-router` `<Router>` with route map stubs for `/`, `/update`, `/template`, `/notifications`
-- `web/src/routes/Dashboard.svelte`: empty stub (renders chrome + placeholder content)
+**Stack:** Svelte 5, SMUI v9 (no MDCWeb — dropped in v9; SMUI used for behaviour/a11y only), no Sass. All styling via custom CSS tokens.
+
+**Theme:** `data-theme` attribute on `<html>` set by inline script before first paint (avoids flash); default = system preference (`prefers-color-scheme`); persisted to `localStorage`. `App.svelte` wrapper `<div class="saurron-app">` mirrors `data-theme` reactively from a theme store.
+
+**Routing:** `svelte-spa-router` (hash-based). Dev server base path `/ui/`; developer hits `http://localhost:PORT/ui/` in browser.
+
+**Files:**
+
+- `web/package.json`: `svelte`, `vite`, `@sveltejs/vite-plugin-svelte`, `svelte-spa-router`, `@smui/button`, `@smui/card`, `@smui/data-table`, `@smui/drawer`, `@smui/linear-progress`, `@smui/snackbar`, `@smui/textfield`, `material-symbols` (npm package — offline/Docker safe)
+- `web/vite.config.js`: Svelte plugin, `base: '/ui/'`, dev proxy (`/v1` → `http://localhost:8080`)
+- `web/src/main.js`: Svelte mount entry point
+- `web/index.html`: base HTML; inline script reads `localStorage` → `prefers-color-scheme` fallback → sets `document.documentElement.dataset.theme`
+- `web/src/tokens.css`: port of `design/dashboard/project/saurron-tokens.css` — Saurron accent only (ember/teal/indigo removed); `.saurron-app` scoping unchanged; light + dark themes; all primitives (shape, elevation, type scale, chips, buttons, cards, running indicators)
+- `web/src/App.svelte`: `<div class="saurron-app" data-theme={$theme}>` wrapper; theme store initialised from `document.documentElement.dataset.theme`, writes back to `localStorage`; `svelte-spa-router` `<Router>` with route map for `/`, `/update`, `/template`, `/notifications`
+- `web/src/routes/Dashboard.svelte`: empty stub (placeholder content)
+- `web/src/routes/Update.svelte`: empty stub
+- `web/src/routes/Template.svelte`: empty stub
+- `web/src/routes/Notifications.svelte`: empty stub
 - `web/src/lib/api.js`: fetch wrapper: `getHistory(page, perPage)`, `getHistoryById(id)`, `getHealth()`, `getContainers()`
 
-**Acceptance:** `pnpm dev` starts Vite; navigating to `/` renders a shell with correct CSS tokens applied in both light and dark themes.
+**Acceptance:** `pnpm dev` starts Vite; navigating to `http://localhost:PORT/ui/` renders a shell with correct CSS tokens applied in both light and dark themes.
 
 ---
 

@@ -33,3 +33,7 @@ tarpaulin-report.html
 docs/_local_config.yml
 
 **/devcontainer-lock.json
+
+# Frontend
+.pnpm-store/
+web/node_modules/
