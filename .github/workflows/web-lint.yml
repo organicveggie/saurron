@@ -1,4 +1,6 @@
 name: Web Lint
+permissions:
+  contents: read
 
 on:
   push:
