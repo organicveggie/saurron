@@ -20,7 +20,7 @@
     "@smui/snackbar": "^9.0.1",
     "@smui/textfield": "^9.0.1",
     "material-symbols": "*",
-    "svelte": "^5.0.0",
+    "svelte": "^5.56.1",
     "svelte-spa-router": "^5.0.0"
   },
   "devDependencies": {
