@@ -16,7 +16,7 @@
     "@smui/card": "^9.0.0",
     "@smui/data-table": "^9.0.0",
     "@smui/drawer": "^9.0.0",
-    "@smui/linear-progress": "^9.0.0",
+    "@smui/linear-progress": "^9.0.1",
     "@smui/snackbar": "^9.0.1",
     "@smui/textfield": "^9.0.0",
     "material-symbols": "*",

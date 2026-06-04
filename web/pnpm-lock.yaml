@@ -21,8 +21,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       '@smui/linear-progress':
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^9.0.1
+        version: 9.0.1
       '@smui/snackbar':
         specifier: ^9.0.1
         version: 9.0.1
@@ -461,8 +461,8 @@ packages:
   '@smui/line-ripple@9.0.0':
     resolution: {integrity: sha512-C947HSb71bLn5PtSG2zxiLnauvZ2xOVH0IwWrKTiyCHENZycAoER9iQDMWPBsqoC/56skpPKzCUq9Dq2sOMfdA==}
 
-  '@smui/linear-progress@9.0.0':
-    resolution: {integrity: sha512-lBR15sEK32MdbmojEEoP8YwUqdUOHk8/SMtHM0JAg+Oen0xx0pukV09QZ15+K3egBWkeJZuE7b0ct7bIjgwIvQ==}
+  '@smui/linear-progress@9.0.1':
+    resolution: {integrity: sha512-7uM63/3j5MCHigXNy1KlDtuyg8TNeHnNd4Pp1VvbS7YZflWYRr0MJWqmJAzv+eqYALRt1RZKD6vxzpFOAO7kLg==}
 
   '@smui/list@9.0.0':
     resolution: {integrity: sha512-4c6hn7PW6BLH2ToeW4c6eEV/QD/GCCn1BBEeHIHrtIi0D3qOGHfw31Hg9UPvzDmgAbzKvOPd4BLBS4FS0VgnZA==}
@@ -1271,7 +1271,7 @@ snapshots:
       '@smui/checkbox': 9.0.0
       '@smui/common': 9.0.0
       '@smui/icon-button': 9.0.0
-      '@smui/linear-progress': 9.0.0
+      '@smui/linear-progress': 9.0.1
       '@smui/list': 9.0.0
       '@smui/menu': 9.0.0
       '@smui/ripple': 9.0.0
@@ -1304,9 +1304,9 @@ snapshots:
     dependencies:
       '@smui/common': 9.0.1
 
-  '@smui/linear-progress@9.0.0':
+  '@smui/linear-progress@9.0.1':
     dependencies:
-      '@smui/common': 9.0.0
+      '@smui/common': 9.0.1
 
   '@smui/list@9.0.0':
     dependencies:
