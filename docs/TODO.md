@@ -38,6 +38,13 @@
 - Proper integration tests — trait abstraction
   - Extract a DockerApi trait from DockerClient, make AppStateInner generic over it (or use Arc<dyn DockerApi>), implement a FakeDockerClient in tests. Full coverage for get_containers. Touches docker.rs, update.rs, http.rs, main.rs — non-trivial refactor, probably 100–200 lines of churn across 4 files.
 
+## UI
+
+- CycleStatusCard — "Next cycle" data source
+  - The plan says to show "Next cycle countdown, schedule interval, watched count." But the /v1/health endpoint only returns { updating, version, hostname }. There's no schedule interval, next-cycle ETA, or watched count. Currently using placeholder values.
+- CycleStatusCard — running state data
+  - The running card in the design shows scanned, total, and current container name. The /v1/health endpoint only has updating: bool — no progress data.
+
 ## Version updates
 
 ### Javascript
