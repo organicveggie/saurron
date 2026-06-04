@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Saurron — Dashboard explorations</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,300..700,0..1,-50..200" rel="stylesheet" />
+
+  <link rel="stylesheet" href="saurron-tokens.css" />
+
+  <style>
+    html, body, #root { height: 100%; margin: 0; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f0eee9;
+      overflow: hidden;
+    }
+    /* Disable text selection while panning the design canvas */
+    body.dc-panning { user-select: none; }
+  </style>
+
+  <!-- React + Babel pinned -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <!-- Mock data (plain JS) -->
+  <script src="saurron-data.js"></script>
+
+  <!-- Tweak defaults (read by useTweaks) -->
+  <script>
+    window.__SAURRON_TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "accent": "saurron",
+      "theme": "dark"
+    }/*EDITMODE-END*/;
+    // Apply theme/accent before first paint to avoid a flash.
+    document.documentElement.dataset.theme = window.__SAURRON_TWEAK_DEFAULTS.theme;
+    document.addEventListener('DOMContentLoaded', () => {
+      document.body.setAttribute('data-theme', window.__SAURRON_TWEAK_DEFAULTS.theme);
+      document.body.setAttribute('data-accent', window.__SAURRON_TWEAK_DEFAULTS.accent);
+    });
+  </script>
+</head>
+<body data-theme="dark" data-accent="saurron">
+  <div id="root"></div>
+
+  <!-- Components (Babel-transpiled in order) -->
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="saurron-chrome.jsx"></script>
+  <script type="text/babel" src="layout-timeline.jsx"></script>
+  <script type="text/babel" src="app.jsx"></script>
+</body>
+</html>
