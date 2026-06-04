@@ -37,3 +37,25 @@
 - Offer alpine based container images
 - Proper integration tests — trait abstraction
   - Extract a DockerApi trait from DockerClient, make AppStateInner generic over it (or use Arc<dyn DockerApi>), implement a FakeDockerClient in tests. Full coverage for get_containers. Touches docker.rs, update.rs, http.rs, main.rs — non-trivial refactor, probably 100–200 lines of churn across 4 files.
+
+## Version updates
+
+### Rust
+
+- sqlx 0.8 → 0.9
+  - [Changelog](https://raw.githubusercontent.com/transact-rs/sqlx/refs/heads/main/CHANGELOG.md)
+  - Relevant impacts for this project (sqlx 0.8 → 0.9, SQLite + migrate + macros):
+    - Breaking — likely requires code changes:
+      - SQLite SqliteValue/SqliteValueRef now !Sync/!Send — if any code holds these across .await points, compile error. Check db.rs.
+      - Stricter SQLite type validation per value — query_as! calls in db.rs (lines 115, 131, 144) may fail if column types don't match Rust types exactly. Macros catch this at compile time, but expect new errors.
+      - Migrate trait breaking changes — sqlx::migrate!().run(&pool) at db.rs:32 may need updates depending on the exact API change.
+    - Breaking — low risk here:
+      - SqlSafeStr / AssertSqlSafe — all queries in db.rs use string literals inside query!/query_scalar!/query_as! macros, not format!(). Likely unaffected.
+      - runtime-tokio feature — combo features removed (e.g. runtime-tokio-native-tls), not bare runtime-tokio. Safe.
+    - Non-breaking:
+      - sqlx-toml — opt-in only, no action needed.
+      - SQLite extension loading now unsafe — no extension loading in codebase.
+      - TransactionManager re-export removed — not used.
+    - Action required before upgrading:
+      - Rust 1.94.0+ needed (0.9 MSRV). Project has no rust-version pin — check CI toolchain.
+      - Compile with --features web after bump and expect macro errors to surface type mismatches.
