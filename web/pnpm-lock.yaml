@@ -24,8 +24,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       '@smui/snackbar':
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^9.0.1
+        version: 9.0.1
       '@smui/textfield':
         specifier: ^9.0.0
         version: 9.0.0
@@ -428,6 +428,9 @@ packages:
   '@smui/button@9.0.0':
     resolution: {integrity: sha512-qmNe4DtAGJ/0rIfjq+ME/rdgAeWgcEDvLjlLmCk6w6UO7hYzfPtE1KuuwX3E9yMbNs/rUEoyWzJUueGuc6vsxA==}
 
+  '@smui/button@9.0.1':
+    resolution: {integrity: sha512-lKQUlK7hnFYEDLkHIOa6I6oWxIt1JT2heynz9iaw9+I0WN6b31GBjMxPfWfdeHY2B7FVNnHRwSyF6cWnqmfDFg==}
+
   '@smui/card@9.0.0':
     resolution: {integrity: sha512-e5sdCgT0oUNtAgrIbSo+VT8K/JTRnavmGbH6uqefzdesFcqpGg/yBYeEbpc2GPzRt79o7Hi1E34qfJaURnOEkQ==}
 
@@ -436,6 +439,9 @@ packages:
 
   '@smui/common@9.0.0':
     resolution: {integrity: sha512-m9N1RybCU3rVYD2ozawL1KhmuVo0TcftB+Dp9wyIXoFQQQabWocrnUYKJTmMHrehubxo0xlGA2PnarXGLhBLzA==}
+
+  '@smui/common@9.0.1':
+    resolution: {integrity: sha512-tnjQ4n3xmEMQdKtr5qHwl/t4pmjU9ntbit/4eD0N2vsF9kzjql3WDBAf6vhQKMZK5c1SGQ1vKRmoU5tv5tCTSw==}
 
   '@smui/data-table@9.0.0':
     resolution: {integrity: sha512-4HZHd1ZDidPGwIknuaE3f/mGSf3ETbq5Z6wnznaSOgDI5WHDPBFDvDZ6opdEqurLZt/QfxK6WLo5MmK2djlqqQ==}
@@ -448,6 +454,9 @@ packages:
 
   '@smui/icon-button@9.0.0':
     resolution: {integrity: sha512-sEafw2zoolqijRvA9JqhGCn+OyFffAQJVin99iPWT/Q4MulWmidXsoTP4nXTMlJNv/GRCnvx4PXRdC60/Ipn/w==}
+
+  '@smui/icon-button@9.0.1':
+    resolution: {integrity: sha512-JyOCyAR98YnLXvgEaRbRbQQbyzaDnBxfohLowe0C1F51tJO46/xEUwQx4nHDuzSa5ASe4FzQ5K21Alkwavl1GA==}
 
   '@smui/line-ripple@9.0.0':
     resolution: {integrity: sha512-C947HSb71bLn5PtSG2zxiLnauvZ2xOVH0IwWrKTiyCHENZycAoER9iQDMWPBsqoC/56skpPKzCUq9Dq2sOMfdA==}
@@ -470,17 +479,23 @@ packages:
   '@smui/ripple@9.0.0':
     resolution: {integrity: sha512-eAtfRGIuLh+2mJELB1wtTVFsK8C1IGQQ+IyHjVls9QcQBE3DWNS159kNlx2apFgDCsG89xGSX2+wNUm2vliR5g==}
 
+  '@smui/ripple@9.0.1':
+    resolution: {integrity: sha512-GHUfIwFlTUy1N3bfjiWC0Rq2jBoDv8XaUhS0qafI2ul1IqkQRxlbQmqM/UTxHvF7rudhDPvr0zol1rPUudWajg==}
+
   '@smui/select@9.0.0':
     resolution: {integrity: sha512-ZRpimrKGKFhqS7/Hchm224BkhIcavqNYvQkM+KKQ36i5lRX6vUM5JJMtXIUaCE9AEG+Ihz2IU5Nr7YXA+DewNA==}
 
-  '@smui/snackbar@9.0.0':
-    resolution: {integrity: sha512-l4W7BfGEaL669eFAndVqBPhPTsjaMjnK6drqdaq8fgYrFXddHq6XpxNH6F3jkgahOrlnFF6ho9xJ/GKzX9T/Sw==}
+  '@smui/snackbar@9.0.1':
+    resolution: {integrity: sha512-m62FBev4as5+dnOOybrFToPolXiqzRo9ArKASeZhBjNHP1LcU84QOXCv7UI5zsu+l5p9ZB2bKhSXeqqakJPdsw==}
 
   '@smui/textfield@9.0.0':
     resolution: {integrity: sha512-GUZ9Ngsj8eSzEDrpbW/ub3QiokSSqE2y+Dcr9JJxuwJQht1gHv7H436ne7DTlw9uzXzWlrkioWVfcAMT0/4/MQ==}
 
   '@smui/touch-target@9.0.0':
     resolution: {integrity: sha512-+0usvtwF2aOoqEWFPr8UTMLsWbAS+DjlVHmXk57h+9jBICy3KRpd5tqup92zWeYPfO4sCh6VPYP7Xw4axJk++g==}
+
+  '@smui/touch-target@9.0.1':
+    resolution: {integrity: sha512-anXbPcWO0zdguq19atMpea3j6TO5Xlb3yppHuvm5jczqgraZN919Lz1Hqs9AdpDp6Kw4773lNEK+JlWa+g4Rog==}
 
   '@sveltejs/acorn-typescript@1.0.10':
     resolution: {integrity: sha512-4WfKk68eTih+MiJD4fSbxN7E8kVBmTMPWHUPYjvl2N0rMs53YLTT8/YjKU5Dtnz5LqDjl7LEw4U7lXR2W3J5WA==}
@@ -1224,6 +1239,12 @@ snapshots:
       '@smui/ripple': 9.0.0
       '@smui/touch-target': 9.0.0
 
+  '@smui/button@9.0.1':
+    dependencies:
+      '@smui/common': 9.0.1
+      '@smui/ripple': 9.0.1
+      '@smui/touch-target': 9.0.1
+
   '@smui/card@9.0.0':
     dependencies:
       '@smui/button': 9.0.0
@@ -1238,6 +1259,10 @@ snapshots:
       '@smui/touch-target': 9.0.0
 
   '@smui/common@9.0.0':
+    dependencies:
+      safevalues: 1.2.0
+
+  '@smui/common@9.0.1':
     dependencies:
       safevalues: 1.2.0
 
@@ -1261,7 +1286,7 @@ snapshots:
 
   '@smui/floating-label@9.0.0':
     dependencies:
-      '@smui/common': 9.0.0
+      '@smui/common': 9.0.1
 
   '@smui/icon-button@9.0.0':
     dependencies:
@@ -1269,9 +1294,15 @@ snapshots:
       '@smui/ripple': 9.0.0
       '@smui/touch-target': 9.0.0
 
+  '@smui/icon-button@9.0.1':
+    dependencies:
+      '@smui/common': 9.0.1
+      '@smui/ripple': 9.0.1
+      '@smui/touch-target': 9.0.1
+
   '@smui/line-ripple@9.0.0':
     dependencies:
-      '@smui/common': 9.0.0
+      '@smui/common': 9.0.1
 
   '@smui/linear-progress@9.0.0':
     dependencies:
@@ -1284,7 +1315,7 @@ snapshots:
 
   '@smui/menu-surface@9.0.0':
     dependencies:
-      '@smui/common': 9.0.0
+      '@smui/common': 9.0.1
 
   '@smui/menu@9.0.0':
     dependencies:
@@ -1295,12 +1326,16 @@ snapshots:
 
   '@smui/notched-outline@9.0.0':
     dependencies:
-      '@smui/common': 9.0.0
+      '@smui/common': 9.0.1
       '@smui/floating-label': 9.0.0
 
   '@smui/ripple@9.0.0':
     dependencies:
       '@smui/common': 9.0.0
+
+  '@smui/ripple@9.0.1':
+    dependencies:
+      '@smui/common': 9.0.1
 
   '@smui/select@9.0.0':
     dependencies:
@@ -1314,12 +1349,12 @@ snapshots:
       '@smui/ripple': 9.0.0
       '@smui/touch-target': 9.0.0
 
-  '@smui/snackbar@9.0.0':
+  '@smui/snackbar@9.0.1':
     dependencies:
-      '@smui/button': 9.0.0
-      '@smui/common': 9.0.0
-      '@smui/icon-button': 9.0.0
-      '@smui/ripple': 9.0.0
+      '@smui/button': 9.0.1
+      '@smui/common': 9.0.1
+      '@smui/icon-button': 9.0.1
+      '@smui/ripple': 9.0.1
 
   '@smui/textfield@9.0.0':
     dependencies:
@@ -1332,6 +1367,10 @@ snapshots:
   '@smui/touch-target@9.0.0':
     dependencies:
       '@smui/common': 9.0.0
+
+  '@smui/touch-target@9.0.1':
+    dependencies:
+      '@smui/common': 9.0.1
 
   '@sveltejs/acorn-typescript@1.0.10(acorn@8.16.0)':
     dependencies:
