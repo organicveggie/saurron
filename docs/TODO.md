@@ -40,10 +40,17 @@
 
 ## Version updates
 
+### Javascript
+
+- Vite 6 → 8
+  - [Changelog](https://github.com/vitejs/vite/blob/main/packages/vite/CHANGELOG.md) ([raw](https://raw.githubusercontent.com/vitejs/vite/refs/heads/main/packages/vite/CHANGELOG.md))
+  - [v7 to v8 migration guide](https://vite.dev/guide/migration.html)
+  - [v6 to v7 migration guide](https://v7.vite.dev/guide/migration)
+
 ### Rust
 
 - sqlx 0.8 → 0.9
-  - [Changelog](https://raw.githubusercontent.com/transact-rs/sqlx/refs/heads/main/CHANGELOG.md)
+  - [Changelog](https://github.com/transact-rs/sqlx/blob/main/CHANGELOG.md) ([raw](https://raw.githubusercontent.com/transact-rs/sqlx/refs/heads/main/CHANGELOG.md))
   - Relevant impacts for this project (sqlx 0.8 → 0.9, SQLite + migrate + macros):
     - Breaking — likely requires code changes:
       - SQLite SqliteValue/SqliteValueRef now !Sync/!Send — if any code holds these across .await points, compile error. Check db.rs.
