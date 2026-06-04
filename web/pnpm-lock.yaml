@@ -27,8 +27,8 @@ importers:
         specifier: ^9.0.1
         version: 9.0.1
       '@smui/textfield':
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^9.0.1
+        version: 9.0.1
       material-symbols:
         specifier: '*'
         version: 0.44.11
@@ -449,8 +449,8 @@ packages:
   '@smui/drawer@9.0.0':
     resolution: {integrity: sha512-aDFiO0JEwMOHjs7Gqq6Nx5uyYX7+Cx+g/MqMOqBIuFS1Vh9aw5JQpVNN442ubJlG1tQJCP/lkk+FfUvUQWqltA==}
 
-  '@smui/floating-label@9.0.0':
-    resolution: {integrity: sha512-Yx288T3Uu5MxxTwomEiakuzWxYQO1kuDWbe0DfDBXM+tmoJPPwAAs0HhB1Mayg3rPllOHXY+6zW6XGdQ5vztUw==}
+  '@smui/floating-label@9.0.1':
+    resolution: {integrity: sha512-jiA+boj02qFRSzQood8lvFgBwAwoARco1tbvIA/zrmgfcMKO+/tS3wtxNxSRg4JIkdHLYkncGS4urMpKA48H0Q==}
 
   '@smui/icon-button@9.0.0':
     resolution: {integrity: sha512-sEafw2zoolqijRvA9JqhGCn+OyFffAQJVin99iPWT/Q4MulWmidXsoTP4nXTMlJNv/GRCnvx4PXRdC60/Ipn/w==}
@@ -458,8 +458,8 @@ packages:
   '@smui/icon-button@9.0.1':
     resolution: {integrity: sha512-JyOCyAR98YnLXvgEaRbRbQQbyzaDnBxfohLowe0C1F51tJO46/xEUwQx4nHDuzSa5ASe4FzQ5K21Alkwavl1GA==}
 
-  '@smui/line-ripple@9.0.0':
-    resolution: {integrity: sha512-C947HSb71bLn5PtSG2zxiLnauvZ2xOVH0IwWrKTiyCHENZycAoER9iQDMWPBsqoC/56skpPKzCUq9Dq2sOMfdA==}
+  '@smui/line-ripple@9.0.1':
+    resolution: {integrity: sha512-MXJhXEci+9wAyEKa8Fnwr7txjly6sLiacCy4xOi01Dea01h+lCG16QiI7zdE9/vM+0stYo0A28FNUSMpDO1QyA==}
 
   '@smui/linear-progress@9.0.0':
     resolution: {integrity: sha512-lBR15sEK32MdbmojEEoP8YwUqdUOHk8/SMtHM0JAg+Oen0xx0pukV09QZ15+K3egBWkeJZuE7b0ct7bIjgwIvQ==}
@@ -473,8 +473,8 @@ packages:
   '@smui/menu@9.0.0':
     resolution: {integrity: sha512-Ugj2aYmfSJFI7f5fxmhRULSrTSV/WAvisIeY07tjyl6TETSOHI3G8y6mA9yHh5jjZjUcXoLObCtJGVHiOM50yA==}
 
-  '@smui/notched-outline@9.0.0':
-    resolution: {integrity: sha512-naVjMl94WPCbkDoDWg7o8ZZ2Br11jEUH6sBNWru5JO+oEVDhiAd2ukXHiatRlNkLAyvyqKZswjGVQ8/XH1mSoQ==}
+  '@smui/notched-outline@9.0.1':
+    resolution: {integrity: sha512-21HgAXxjrAPjHNskH3QtA7FFcwjXuvnbh0NVsM8XckymLI3C/UeoooZACB8AEeVN37VbSQ6Z3pcdBgHQAZGLVg==}
 
   '@smui/ripple@9.0.0':
     resolution: {integrity: sha512-eAtfRGIuLh+2mJELB1wtTVFsK8C1IGQQ+IyHjVls9QcQBE3DWNS159kNlx2apFgDCsG89xGSX2+wNUm2vliR5g==}
@@ -488,8 +488,8 @@ packages:
   '@smui/snackbar@9.0.1':
     resolution: {integrity: sha512-m62FBev4as5+dnOOybrFToPolXiqzRo9ArKASeZhBjNHP1LcU84QOXCv7UI5zsu+l5p9ZB2bKhSXeqqakJPdsw==}
 
-  '@smui/textfield@9.0.0':
-    resolution: {integrity: sha512-GUZ9Ngsj8eSzEDrpbW/ub3QiokSSqE2y+Dcr9JJxuwJQht1gHv7H436ne7DTlw9uzXzWlrkioWVfcAMT0/4/MQ==}
+  '@smui/textfield@9.0.1':
+    resolution: {integrity: sha512-LOG2M/5lk5tYsO5uSHukpOw2NvF7E0LYz/rL11rIOsWYoAUK2I9DTupxTcyRyOA8aPDO4a2tS7fXDFgz4/Mi5Q==}
 
   '@smui/touch-target@9.0.0':
     resolution: {integrity: sha512-+0usvtwF2aOoqEWFPr8UTMLsWbAS+DjlVHmXk57h+9jBICy3KRpd5tqup92zWeYPfO4sCh6VPYP7Xw4axJk++g==}
@@ -1284,7 +1284,7 @@ snapshots:
       '@smui/list': 9.0.0
       '@smui/ripple': 9.0.0
 
-  '@smui/floating-label@9.0.0':
+  '@smui/floating-label@9.0.1':
     dependencies:
       '@smui/common': 9.0.1
 
@@ -1300,7 +1300,7 @@ snapshots:
       '@smui/ripple': 9.0.1
       '@smui/touch-target': 9.0.1
 
-  '@smui/line-ripple@9.0.0':
+  '@smui/line-ripple@9.0.1':
     dependencies:
       '@smui/common': 9.0.1
 
@@ -1324,10 +1324,10 @@ snapshots:
       '@smui/menu-surface': 9.0.0
       '@smui/ripple': 9.0.0
 
-  '@smui/notched-outline@9.0.0':
+  '@smui/notched-outline@9.0.1':
     dependencies:
       '@smui/common': 9.0.1
-      '@smui/floating-label': 9.0.0
+      '@smui/floating-label': 9.0.1
 
   '@smui/ripple@9.0.0':
     dependencies:
@@ -1340,12 +1340,12 @@ snapshots:
   '@smui/select@9.0.0':
     dependencies:
       '@smui/common': 9.0.0
-      '@smui/floating-label': 9.0.0
-      '@smui/line-ripple': 9.0.0
+      '@smui/floating-label': 9.0.1
+      '@smui/line-ripple': 9.0.1
       '@smui/list': 9.0.0
       '@smui/menu': 9.0.0
       '@smui/menu-surface': 9.0.0
-      '@smui/notched-outline': 9.0.0
+      '@smui/notched-outline': 9.0.1
       '@smui/ripple': 9.0.0
       '@smui/touch-target': 9.0.0
 
@@ -1356,13 +1356,13 @@ snapshots:
       '@smui/icon-button': 9.0.1
       '@smui/ripple': 9.0.1
 
-  '@smui/textfield@9.0.0':
+  '@smui/textfield@9.0.1':
     dependencies:
-      '@smui/common': 9.0.0
-      '@smui/floating-label': 9.0.0
-      '@smui/line-ripple': 9.0.0
-      '@smui/notched-outline': 9.0.0
-      '@smui/ripple': 9.0.0
+      '@smui/common': 9.0.1
+      '@smui/floating-label': 9.0.1
+      '@smui/line-ripple': 9.0.1
+      '@smui/notched-outline': 9.0.1
+      '@smui/ripple': 9.0.1
 
   '@smui/touch-target@9.0.0':
     dependencies:
