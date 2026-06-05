@@ -1,5 +1,5 @@
 <script>
-  export let trigger;
+  let { trigger } = $props();
 
   const META = {
     scheduled: { icon: 'schedule', label: 'scheduled' },
@@ -7,7 +7,7 @@
     http_api: { icon: 'webhook', label: 'webhook' },
   };
 
-  $: m = META[trigger] ?? META.scheduled;
+  let m = $derived(META[trigger] ?? META.scheduled);
 </script>
 
 <span class="trigger-chip">

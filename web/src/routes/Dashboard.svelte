@@ -20,46 +20,53 @@
     }
   });
 
-  $: noData = !loading && cycles.length === 0;
+  let noData = $derived(!loading && cycles.length === 0);
 
-  $: recentCycles = cycles.filter(
-    (c) => new Date(c.started_at).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000,
+  let recentCycles = $derived(
+    cycles.filter((c) => new Date(c.started_at).getTime() >= Date.now() - 7 * 24 * 60 * 60 * 1000),
   );
 
-  $: lastCycle = cycles[0] ?? null;
-  $: lastCycleDuration = lastCycle
-    ? Math.round((new Date(lastCycle.completed_at) - new Date(lastCycle.started_at)) / 1000)
-    : 0;
-  $: lastCycleOutcome = lastCycle
-    ? lastCycle.failed > 0
-      ? 'failed'
-      : lastCycle.rolled_back > 0
-        ? 'rolled_back'
-        : lastCycle.updated > 0
-          ? 'updated'
-          : 'up_to_date'
-    : 'up_to_date';
-  $: lastCycleValue = lastCycle ? formatRelative(lastCycle.started_at) : '—';
-  $: lastCycleSub = lastCycle
-    ? `${formatAbs(lastCycle.started_at)} · ${formatDuration(lastCycleDuration)}`
-    : '—';
-
-  $: updatesThisWeek = recentCycles.reduce((a, c) => a + Number(c.updated), 0);
-  $: failuresThisWeek = recentCycles.reduce(
-    (a, c) => a + Number(c.failed) + Number(c.rolled_back),
-    0,
+  let lastCycle = $derived(cycles[0] ?? null);
+  let lastCycleDuration = $derived(
+    lastCycle
+      ? Math.round((new Date(lastCycle.completed_at) - new Date(lastCycle.started_at)) / 1000)
+      : 0,
   );
-  $: cyclesThisWeek = recentCycles.length;
+  let lastCycleOutcome = $derived(
+    lastCycle
+      ? lastCycle.failed > 0
+        ? 'failed'
+        : lastCycle.rolled_back > 0
+          ? 'rolled_back'
+          : lastCycle.updated > 0
+            ? 'updated'
+            : 'up_to_date'
+      : 'up_to_date',
+  );
+  let lastCycleValue = $derived(lastCycle ? formatRelative(lastCycle.started_at) : '—');
+  let lastCycleSub = $derived(
+    lastCycle ? `${formatAbs(lastCycle.started_at)} · ${formatDuration(lastCycleDuration)}` : '—',
+  );
 
-  $: updatesValue = noData ? '—' : String(updatesThisWeek);
-  $: updatesSub = noData ? '—' : `across ${cyclesThisWeek} cycle${cyclesThisWeek === 1 ? '' : 's'}`;
+  let updatesThisWeek = $derived(recentCycles.reduce((a, c) => a + Number(c.updated), 0));
+  let failuresThisWeek = $derived(
+    recentCycles.reduce((a, c) => a + Number(c.failed) + Number(c.rolled_back), 0),
+  );
+  let cyclesThisWeek = $derived(recentCycles.length);
 
-  $: failuresValue = noData ? '—' : String(failuresThisWeek);
-  $: failuresSub = noData ? '—' : failuresThisWeek === 0 ? 'all green' : 'review failed cycles';
-  $: failuresTone = !noData && failuresThisWeek > 0 ? 'error' : 'neutral';
-  $: failuresIcon = !noData && failuresThisWeek > 0 ? 'error' : 'check_circle';
+  let updatesValue = $derived(noData ? '—' : String(updatesThisWeek));
+  let updatesSub = $derived(
+    noData ? '—' : `across ${cyclesThisWeek} cycle${cyclesThisWeek === 1 ? '' : 's'}`,
+  );
 
-  $: dailyData = getDailyAggregates(cycles);
+  let failuresValue = $derived(noData ? '—' : String(failuresThisWeek));
+  let failuresSub = $derived(
+    noData ? '—' : failuresThisWeek === 0 ? 'all green' : 'review failed cycles',
+  );
+  let failuresTone = $derived(!noData && failuresThisWeek > 0 ? 'error' : 'neutral');
+  let failuresIcon = $derived(!noData && failuresThisWeek > 0 ? 'error' : 'check_circle');
+
+  let dailyData = $derived(getDailyAggregates(cycles));
 </script>
 
 <div class="dashboard-content">

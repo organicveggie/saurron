@@ -3,8 +3,7 @@
   import { health } from '../stores/health.js';
   import { theme } from '../stores/theme.js';
 
-  export let title = '';
-  export let subtitle = null;
+  let { title = '', subtitle = null } = $props();
 
   function toggleTheme() {
     theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
@@ -25,7 +24,7 @@
     <kbd>⌘K</kbd>
   </div>
 
-  <button class="btn icon" title="Toggle theme" on:click={toggleTheme}>
+  <button class="btn icon" title="Toggle theme" onclick={toggleTheme}>
     <span class="ms">{$theme === 'dark' ? 'light_mode' : 'dark_mode'}</span>
   </button>
 
@@ -35,7 +34,7 @@
       Running…
     </button>
   {:else}
-    <button class="btn filled run-btn" on:click={() => push('/update')}>
+    <button class="btn filled run-btn" onclick={() => push('/update')}>
       <span class="ms">play_arrow</span>
       Run cycle
     </button>

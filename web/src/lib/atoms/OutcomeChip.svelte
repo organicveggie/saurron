@@ -1,6 +1,5 @@
 <script>
-  export let outcome;
-  export let dense = false;
+  let { outcome, dense = false } = $props();
 
   const META = {
     updated: { cls: 'success', icon: 'check_circle', label: 'updated' },
@@ -10,7 +9,7 @@
     up_to_date: { cls: 'neutral', icon: 'check', label: 'up-to-date' },
   };
 
-  $: m = META[outcome] ?? META.up_to_date;
+  let m = $derived(META[outcome] ?? META.up_to_date);
 </script>
 
 <span class="chip {m.cls}" style={dense ? 'height: 22px; padding: 0 8px; font-size: 11px;' : ''}>

@@ -37,7 +37,7 @@
   }
 </script>
 
-<svelte:window on:resize={handleResize} />
+<svelte:window onresize={handleResize} />
 
 <div class="saurron-app" data-theme={$theme}>
   <div class="app-shell">
