@@ -1,5 +1,5 @@
 <script>
-  export let running = false;
+  let { running = false } = $props();
 </script>
 
 {#if running}

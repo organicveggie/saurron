@@ -14,7 +14,7 @@
     <button
       class="bottom-nav-item"
       class:active={router.location === item.route}
-      on:click={() => push(item.route)}
+      onclick={() => push(item.route)}
     >
       <span class="ms" class:fill={router.location === item.route} style="font-size: 24px"
         >{item.icon}</span

@@ -6,7 +6,7 @@
   import RunningChip from './RunningChip.svelte';
   import CycleStatusCard from './CycleStatusCard.svelte';
 
-  export let variant = 'standard';
+  let { variant = 'standard' } = $props();
 
   const PREVIEW_COUNT = 5;
   let containers = [];
@@ -27,8 +27,8 @@
     { route: '/notifications', label: 'Notifications', icon: 'notifications' },
   ];
 
-  $: hiddenCount = Math.max(0, containers.length - PREVIEW_COUNT);
-  $: visibleContainers = showAll ? containers : containers.slice(0, PREVIEW_COUNT);
+  let hiddenCount = $derived(Math.max(0, containers.length - PREVIEW_COUNT));
+  let visibleContainers = $derived(showAll ? containers : containers.slice(0, PREVIEW_COUNT));
 
   function stateColor(state) {
     if (state === 'running') return 'var(--success)';
@@ -61,7 +61,7 @@
         class="rail-btn"
         class:rail-btn-active={router.location === item.route}
         title={item.label}
-        on:click={() => push(item.route)}
+        onclick={() => push(item.route)}
       >
         <span class="ms" class:fill={router.location === item.route} style="font-size: 24px"
           >{item.icon}</span
@@ -114,7 +114,7 @@
         <button
           class="nav-item"
           class:nav-item-active={router.location === item.route}
-          on:click={() => push(item.route)}
+          onclick={() => push(item.route)}
         >
           <span class="ms" class:fill={router.location === item.route} style="font-size: 22px"
             >{item.icon}</span
@@ -147,11 +147,11 @@
           </div>
         {/each}
         {#if !showAll && hiddenCount > 0}
-          <button class="show-toggle" on:click={() => (showAll = true)}>
+          <button class="show-toggle" onclick={() => (showAll = true)}>
             + {hiddenCount} more…
           </button>
         {:else if showAll && containers.length > PREVIEW_COUNT}
-          <button class="show-toggle" on:click={() => (showAll = false)}>Show less</button>
+          <button class="show-toggle" onclick={() => (showAll = false)}>Show less</button>
         {/if}
       </div>
     </div>

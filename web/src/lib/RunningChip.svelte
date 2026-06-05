@@ -1,5 +1,5 @@
 <script>
-  export let running = false;
+  let { running = false } = $props();
 </script>
 
 <span class="running-chip {running ? 'live' : 'idle'}">
