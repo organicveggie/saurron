@@ -154,7 +154,7 @@ All new routes compiled only with `--features web`. No auth enforced in v1.
 
 ---
 
-### M6 — Frontend: App chrome
+### M6 — Frontend: App chrome ✓ DONE
 
 NavDrawer, TopAppBar, shared atoms.
 
@@ -197,14 +197,25 @@ NavDrawer, TopAppBar, shared atoms.
 
 Summary strip at the top of Dashboard.
 
+**Decisions recorded:**
+
+- "This week" means rolling 7 days (not calendar week), consistent with M8's default "Last 7 days" filter.
+- `StatCard` badge/chart use Svelte 5 snippet syntax (`{#snippet}` / `{@render}`), not legacy `<slot>`.
+- Sparkline y-axis plots `updated` count per day; bad-day dots mark any day with `failed > 0` or `rolled_back > 0`.
+- Responsive layout uses CSS media queries (no JS `compact` prop). Sparkline SVG uses `width="100%"` + `viewBox` so CSS controls its width. A viewport store is deferred to M8 if JS-gated compact behaviour is needed there.
+- `duration_sec` is not in the API response; computed on the frontend as `(new Date(completed_at) - new Date(started_at)) / 1000`.
+- "Updates this week" subtitle shows `across N cycles` where N = cycle count in the rolling 7-day window.
+- Sparkline always emits exactly 7 data points; days with no cycles are zero-padded.
+- When history is empty, stat cards show `—` for all derived values.
+
 **Deliverables:**
 
-- `web/src/lib/StatCard.svelte`: label (overline), large display value, subtitle, optional badge slot, optional chart slot; `tone` prop drives error-container background when failures exist
-- `web/src/lib/Sparkline.svelte`: SVG polyline + filled area; data is `{ updated, failed, rolled_back }[]` per day (7 points); bad-day dots (any failure) rendered in `--error` colour
+- `web/src/lib/StatCard.svelte`: label (overline), large display value, subtitle, optional badge snippet, optional chart snippet; `tone` prop drives error-container background when failures exist
+- `web/src/lib/Sparkline.svelte`: SVG polyline + filled area; `width="100%"` + `viewBox` for CSS-controlled sizing; data is `{ updated, failed, rolled_back }[]` per day (7 points, zero-padded); bad-day dots rendered in `--error` colour
 - `Dashboard.svelte` additions:
   - On mount: fetch page 1 of history (`getHistory(1, 100)` to get enough data for weekly stats)
-  - Derive: last cycle timestamp + outcome, updates-this-week, failures-this-week, daily aggregates for sparkline
-  - Render three `StatCard` instances in a responsive 3-column (desktop) / 2-row (compact) grid
+  - Derive: last cycle timestamp + outcome (failed > 0 → `failed`; rolled_back > 0 → `rolled_back`; updated > 0 → `updated`; else `up_to_date`), updates-this-week, failures-this-week, cycle-count-this-week, daily aggregates (7 points) for sparkline
+  - Render three `StatCard` instances in a responsive 3-column (desktop) / 2-column (≤899 px) grid; Last Cycle card spans full width at ≤899 px
 
 **Acceptance:** cards show real API values; sparkline renders without errors on empty dataset; failure card has error-container tint when count > 0.
 
