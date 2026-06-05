@@ -13,6 +13,7 @@
             "extensions": [
                 "ms-azuretools.vscode-docker",
                 "rust-lang.rust-analyzer",
+                "svelte.svelte-vscode",
                 "tamasfe.even-better-toml"
             ],
             "settings": {
