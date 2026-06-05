@@ -193,7 +193,7 @@ NavDrawer, TopAppBar, shared atoms.
 
 ---
 
-### M7 — Frontend: Dashboard stat cards
+### M7 — Frontend: Dashboard stat cards ✓ DONE
 
 Summary strip at the top of Dashboard.
 
