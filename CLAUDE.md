@@ -138,6 +138,11 @@ When Saurron detects its own container is stale, it: pulls new image → renames
 - Run `rustfmt --edition 2024` on Rust files after modifying
 - Keep code coverage at or above 50%
 
+### Javascript and Svelte
+
+- Run `pnpm prettier` on Javascript and Svelte files after modifying
+- Run `pnpm lint` on Javascript and Svelte files after modifying
+
 ### Markdown
 
 * Always place blank line before first line in list (ordered or unordered).

@@ -158,20 +158,33 @@ All new routes compiled only with `--features web`. No auth enforced in v1.
 
 NavDrawer, TopAppBar, shared atoms.
 
+**Decisions recorded:**
+
+- `App.svelte` owns the layout shell (Option A): NavDrawer + TopAppBar wrap the `<Router>` once; route stubs remain simple. All v1 routes use identical chrome.
+- `CycleStatusCard` idle state shows placeholder values (`—` / `—` / `—`) for next-cycle countdown, schedule interval, and watched count; `/v1/health` does not expose this data and no other endpoint does either. Wire to real data when a future endpoint provides it.
+- `CycleStatusCard` running state shows indeterminate progress bar + "Cycle running" label only; no scanned/total/current-container-name because `/v1/health` only exposes `updating: bool`.
+- `BottomNavBar` shows the four nav destinations only (Dashboard, Manual update, Template, Notifications). No "Run cycle" button in the bottom bar.
+- `TopAppBar` includes a non-functional search field (input renders, ⌘K shortcut does nothing); wired up in M8.
+- `material-symbols/rounded.css` already imported in `main.js` (done in M5); no font-loading work needed in M6.
+
 **Deliverables:**
 
+- `web/src/App.svelte` (update): wrap `<Router>` in a layout shell — `NavDrawer` on the left, right column with `TopAppBar` above and `<Router>` below; `BottomNavBar` at bottom of viewport on small screens
 - `web/src/lib/NavDrawer.svelte`
   - Standard variant (264 px): logo, version + hostname from health store, RunningChip, nav items (active state), Watched section (from `getContainers`), CycleStatusCard footer
   - Rail variant (64 px): logo with running-dot badge, icon-only nav buttons, CycleStatusBadge footer
   - Responsive: standard at ≥900 px viewport width; rail at ≥600 px; hidden below 600 px (bottom bar takes over)
 - `web/src/lib/TopAppBar.svelte`
   - Title + optional subtitle
+  - Non-functional search field (input present, ⌘K does nothing; wired in M8)
   - Theme toggle button (light_mode / dark_mode icon)
   - "Run cycle" filled button (routes to `/update` page); morphs to disabled "Running…" tonal button while `health.updating` is true
   - Indeterminate progress bar underline (`running-bar thin`) while cycle running
-- `web/src/lib/BottomNavBar.svelte`: four icon+label destinations; shown below 600 px
+- `web/src/lib/BottomNavBar.svelte`: four icon+label nav destinations (Dashboard, Manual update, Template, Notifications); shown below 600 px viewport width
 - `web/src/lib/RunningChip.svelte`: idle / live pill
-- `web/src/lib/CycleStatusCard.svelte`: idle (Next cycle countdown, schedule interval, watched count) / running (progress bar, current container name, scanned/total count) states
+- `web/src/lib/CycleStatusCard.svelte`:
+  - Idle state: "Next cycle" card with placeholder values (`—`) for countdown, schedule interval, watched count
+  - Running state: indeterminate progress bar + "Cycle running" label; no scanned/total/current (health only provides `updating: bool`)
 - `web/src/lib/atoms/OutcomeChip.svelte`: `outcome` prop → colour class + icon
 - `web/src/lib/atoms/TriggerChip.svelte`: `trigger` prop → icon + small-caps label
 - `web/src/stores/health.js`: Svelte writable store; polls `GET /v1/health` every 5 s; exposes `{ updating, version, hostname }`
