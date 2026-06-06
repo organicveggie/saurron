@@ -1,4 +1,13 @@
-# Stage 1: Build
+# Stage 1: Frontend build
+FROM node:22-bookworm-slim AS node-builder
+
+WORKDIR /build/web
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
+RUN npm install -g pnpm && pnpm install --frozen-lockfile
+COPY web/ ./
+RUN pnpm build
+
+# Stage 2: Rust build
 FROM rust:1-slim-bookworm AS builder
 
 ARG SAURRON_BUILD_VERSION=v0.0.0-unknown
@@ -6,10 +15,10 @@ ENV SAURRON_BUILD_VERSION=${SAURRON_BUILD_VERSION}
 
 WORKDIR /build
 COPY . .
+COPY --from=node-builder /build/web/dist ./web/dist
+RUN cargo build --profile release --locked --features web
 
-RUN cargo build --profile release --locked
-
-# Stage 2: Runtime
+# Stage 3: Runtime
 FROM debian:bookworm-slim AS runtime
 
 RUN apt-get update \

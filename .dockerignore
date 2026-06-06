@@ -8,3 +8,5 @@ docs/
 lcov.info
 tarpaulin-report.*
 *.code-workspace
+web/node_modules/
+web/dist/

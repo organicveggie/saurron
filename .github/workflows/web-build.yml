@@ -1,0 +1,55 @@
+name: Web Build
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/src/**/*.svelte'
+      - 'web/src/**/*.js'
+      - 'web/eslint.config.js'
+      - 'web/package.json'
+      - 'web/pnpm-lock.yaml'
+      - 'web/vite.config.js'
+      - 'web/svelte.config.js'
+      - 'web/index.html'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'web/src/**/*.svelte'
+      - 'web/src/**/*.js'
+      - 'web/eslint.config.js'
+      - 'web/package.json'
+      - 'web/pnpm-lock.yaml'
+      - 'web/vite.config.js'
+      - 'web/svelte.config.js'
+      - 'web/index.html'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Vite Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: latest
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
