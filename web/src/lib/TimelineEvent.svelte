@@ -33,12 +33,14 @@
 <div class="event" class:quiet={isQuiet}>
   <div class="dot" style="background: {isQuiet ? 'var(--outline-variant)' : activeDotColor}"></div>
 
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div
     class="card event-card"
     class:expanded={isExpanded}
     class:condensed={isQuiet && !isExpanded}
+    role="button"
+    tabindex="0"
     onclick={onToggle}
+    onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && onToggle()}
   >
     <div class="row">
       <div class="time-col">
