@@ -37,6 +37,9 @@
     "features": {
         "ghcr.io/devcontainers/features/node:1": {},
         "ghcr.io/anthropics/devcontainer-features/claude-code:1": {},
+        "ghcr.io/devcontainers/features/git:1": {
+            "version": "latest"
+        },
         "ghcr.io/devcontainers/features/github-cli:1": {},
         "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
             "version": "latest",
@@ -44,17 +47,20 @@
             "moby": false
         }
     },
+    "containerEnv": {
+        "GPG_TTY": "${localEnv:GPG_TTY}"
+    },
     // Use 'mounts' to make the cargo cache persistent in a Docker Volume.
     "mounts": [
         "source=devcontainer-cargo-cache-${devcontainerId},target=/usr/local/cargo,type=volume",
-        "source=claude-code-config,target=/home/vscode/.claude,type=volume",
+        "source=claude-code-config-saurron,target=/home/vscode/.claude,type=volume",
         "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude/CLAUDE.md,target=/home/vscode/.claude/CLAUDE.md,type=bind,consistency=cached",
         "source=${localEnv:HOME}${localEnv:USERPROFILE}/.claude/.credentials.json,target=/home/vscode/.claude/.credentials.json,type=bind,consistency=cached"
     ],
-    "postAttachCommand": "sudo chown vscode:vscode /home/vscode/.claude",
+    "postAttachCommand": "sudo chown vscode:vscode /home/vscode/.claude && sudo chown -R vscode:rustlang /usr/local/cargo",
     // Use 'postCreateCommand' to run commands after the container is created.
     "postCreateCommand": "rustc --version",
-    // "postCreateCommand": "sudo sh -c 'echo \"\\n[openssl_init]\\nssl_conf = ssl_sect\\n\\n[ssl_sect]\\nsystem_default = system_default_sect\\n\\n[system_default_sect]\\nMaxProtocol = TLSv1.2\" >> /etc/ssl/openssl.cnf' && rustc --version",
     // Use 'postStartCommand' to run commands every time the container is started.
-    "postStartCommand": "rustc --version && git config --global --add safe.directory ${containerWorkspaceFolder}"
+    "postStartCommand": "rustc --version",
+   "updateContentCommand": "bash ${containerWorkspaceFolder}/.devcontainer/update-content.sh ${containerWorkspaceFolder}"    
 }
