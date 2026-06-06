@@ -254,7 +254,7 @@ Main content area of Dashboard.
 
 ---
 
-### M9 — Build pipeline integration
+### M9 — Build pipeline integration ✓ DONE
 
 Wire frontend build into the release process.
 

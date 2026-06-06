@@ -102,8 +102,19 @@ jobs:
         with:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v6
+        with:
+          version: latest
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Build frontend
+        working-directory: web
+        run: pnpm install --frozen-lockfile && pnpm build
       - name: Build release binary
-        run: cargo build --profile release --locked
+        run: cargo build --profile release --locked --features web
         env:
           SAURRON_BUILD_VERSION: ${{ github.ref_name }}
       - name: Package tarball
