@@ -2,13 +2,25 @@
   import { push } from 'svelte-spa-router';
   import { health } from '../stores/health.js';
   import { theme } from '../stores/theme.js';
+  import { searchQuery } from '../stores/search.js';
 
   let { title = '', subtitle = null } = $props();
 
   function toggleTheme() {
     theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
   }
+
+  let inputEl = $state(null);
+
+  function handleKeydown(e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      inputEl?.focus();
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
 
 <header class="top-bar">
   <div class="top-bar-title">
@@ -20,7 +32,7 @@
 
   <div class="search-field">
     <span class="ms" style="font-size: 18px">search</span>
-    <input placeholder="Search cycles, containers…" />
+    <input bind:this={inputEl} bind:value={$searchQuery} placeholder="Search cycles, containers…" />
     <kbd>⌘K</kbd>
   </div>
 

@@ -25,6 +25,44 @@ export function formatDuration(seconds) {
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
+export function formatTime(isoStr) {
+  return new Date(isoStr).toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
+export function groupByDay(list) {
+  const groups = [];
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayMs = todayStart.getTime();
+
+  for (const c of list) {
+    const cycleDay = new Date(c.started_at);
+    cycleDay.setHours(0, 0, 0, 0);
+    const diff = Math.round((todayMs - cycleDay.getTime()) / 86400000);
+    const label =
+      diff === 0
+        ? 'Today'
+        : diff === 1
+          ? 'Yesterday'
+          : diff < 7
+            ? new Date(c.started_at).toLocaleDateString(undefined, { weekday: 'long' })
+            : new Date(c.started_at).toLocaleDateString(undefined, {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric',
+              });
+
+    const grp = groups.find((g) => g.label === label);
+    if (grp) grp.cycles.push(c);
+    else groups.push({ label, cycles: [c] });
+  }
+  return groups;
+}
+
 export function getDailyAggregates(allCycles) {
   const now = new Date();
   return Array.from({ length: 7 }, (_, i) => {

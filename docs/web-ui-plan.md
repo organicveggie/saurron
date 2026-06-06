@@ -225,6 +225,14 @@ Summary strip at the top of Dashboard.
 
 Main content area of Dashboard.
 
+**Decisions recorded:**
+
+- Initial history fetch is `getHistory(1, 20)` (not 100). Stat cards are computed from all loaded pages; weekly stats may undercount if 7-day history spans more pages than loaded — acceptable for v1.
+- "Load older" performs real API pagination (page 2, 3, …, per_page=20) and appends to local list. `total` from API response drives whether the button is shown.
+- Search query is shared via a new `src/stores/search.js` writable store. `TopAppBar` writes on input; `Dashboard` reads and filters. State persists across route changes — acceptable for v1.
+- Compact/desktop branching (segmented toggle visibility, preview chip visibility) is handled with CSS `@media` rules only. No JS viewport store.
+- `ContainerOutcomeRow` new-image column: shows `new_image` tag + digest when present; falls back to `reason` or `—` when `new_image` is null (covers `skipped` and some `failed` cases).
+
 **Deliverables:**
 
 - `web/src/lib/TimelineEvent.svelte`
