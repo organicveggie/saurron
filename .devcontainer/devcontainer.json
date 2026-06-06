@@ -62,5 +62,5 @@
     "postCreateCommand": "rustc --version",
     // Use 'postStartCommand' to run commands every time the container is started.
     "postStartCommand": "rustc --version",
-   "updateContentCommand": "bash ${containerWorkspaceFolder}/.devcontainer/update-content.sh ${containerWorkspaceFolder}"    
+    "updateContentCommand": "bash ${containerWorkspaceFolder}/.devcontainer/update-content.sh ${containerWorkspaceFolder}"
 }
