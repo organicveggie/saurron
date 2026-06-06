@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@smui/button':
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^9.0.1
+        version: 9.0.1
       '@smui/card':
         specifier: ^9.0.1
         version: 9.0.1
@@ -253,9 +253,6 @@ packages:
 
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
-
-  '@smui/button@9.0.0':
-    resolution: {integrity: sha512-qmNe4DtAGJ/0rIfjq+ME/rdgAeWgcEDvLjlLmCk6w6UO7hYzfPtE1KuuwX3E9yMbNs/rUEoyWzJUueGuc6vsxA==}
 
   '@smui/button@9.0.1':
     resolution: {integrity: sha512-lKQUlK7hnFYEDLkHIOa6I6oWxIt1JT2heynz9iaw9+I0WN6b31GBjMxPfWfdeHY2B7FVNnHRwSyF6cWnqmfDFg==}
@@ -1056,12 +1053,6 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.0.1': {}
-
-  '@smui/button@9.0.0':
-    dependencies:
-      '@smui/common': 9.0.0
-      '@smui/ripple': 9.0.0
-      '@smui/touch-target': 9.0.0
 
   '@smui/button@9.0.1':
     dependencies:

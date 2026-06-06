@@ -12,7 +12,7 @@
     "format:check": "prettier --check src"
   },
   "dependencies": {
-    "@smui/button": "^9.0.0",
+    "@smui/button": "^9.0.1",
     "@smui/card": "^9.0.1",
     "@smui/data-table": "^9.0.1",
     "@smui/drawer": "^9.0.1",
