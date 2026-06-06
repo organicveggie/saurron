@@ -37,6 +37,7 @@
 - Offer alpine based container images
 - Proper integration tests — trait abstraction
   - Extract a DockerApi trait from DockerClient, make AppStateInner generic over it (or use Arc<dyn DockerApi>), implement a FakeDockerClient in tests. Full coverage for get_containers. Touches docker.rs, update.rs, http.rs, main.rs — non-trivial refactor, probably 100–200 lines of churn across 4 files.
+- CI never builds/tests the web feature
 
 ## UI
 
