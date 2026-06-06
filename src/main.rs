@@ -286,12 +286,32 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
+    let schedule_info = match &schedule_mode {
+        scheduler::ScheduleMode::RunOnce => http::ScheduleInfo {
+            mode: "run_once",
+            interval_secs: None,
+            cron_expr: None,
+        },
+        scheduler::ScheduleMode::Interval(d) => http::ScheduleInfo {
+            mode: "interval",
+            interval_secs: Some(d.as_secs()),
+            cron_expr: None,
+        },
+        scheduler::ScheduleMode::Cron(s) => http::ScheduleInfo {
+            mode: "cron",
+            interval_secs: None,
+            cron_expr: Some(s.source().to_string()),
+        },
+    };
+
     let state = Arc::new(http::AppStateInner {
         docker,
         registry: registry_client,
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        schedule_info,
+        next_run_at: std::sync::Mutex::new(None),
         #[cfg(feature = "web")]
         pool: db_pool,
     });
@@ -304,14 +324,23 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let state_for_scheduler = Arc::clone(&state);
+    let next_run_state = Arc::clone(&state);
     let scheduler_task = tokio::spawn(async move {
-        scheduler::run_scheduler(schedule_mode, move || {
-            let s = Arc::clone(&state_for_scheduler);
-            async move {
-                let _guard = s.update_lock.lock().await;
-                http::run_cycle_with_state(&s, "scheduled").await;
-            }
-        })
+        scheduler::run_scheduler(
+            schedule_mode,
+            move || {
+                let s = Arc::clone(&state_for_scheduler);
+                async move {
+                    let _guard = s.update_lock.lock().await;
+                    http::run_cycle_with_state(&s, "scheduled").await;
+                }
+            },
+            move |t| {
+                if let Ok(mut g) = next_run_state.next_run_at.lock() {
+                    *g = t;
+                }
+            },
+        )
         .await;
     });
 

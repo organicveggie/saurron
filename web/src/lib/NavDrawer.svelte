@@ -157,7 +157,7 @@
     </div>
 
     <div class="spacer"></div>
-    <CycleStatusCard running={$health.updating} />
+    <CycleStatusCard running={$health.updating} watchedCount={containers.length} />
   </nav>
 {/if}
 

@@ -461,6 +461,12 @@ async fn post_update_via_http_records_scan_cycle_metric() {
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        schedule_info: saurron::http::ScheduleInfo {
+            mode: "interval",
+            interval_secs: Some(86_400),
+            cron_expr: None,
+        },
+        next_run_at: std::sync::Mutex::new(None),
         #[cfg(feature = "web")]
         pool: None,
     });
@@ -602,6 +608,12 @@ async fn post_update_via_http_dispatches_webhook_on_update() {
         config,
         selector,
         update_lock: tokio::sync::Mutex::new(()),
+        schedule_info: saurron::http::ScheduleInfo {
+            mode: "interval",
+            interval_secs: Some(86_400),
+            cron_expr: None,
+        },
+        next_run_at: std::sync::Mutex::new(None),
         #[cfg(feature = "web")]
         pool: None,
     });

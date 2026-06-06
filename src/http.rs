@@ -20,6 +20,12 @@ const VERSION: &str = env!("SAURRON_VERSION");
 #[cfg(feature = "web")]
 use axum::extract::Path;
 
+pub struct ScheduleInfo {
+    pub mode: &'static str,
+    pub interval_secs: Option<u64>,
+    pub cron_expr: Option<String>,
+}
+
 pub struct AppStateInner {
     pub docker: docker::DockerClient,
     pub registry: registry::RegistryClient,
@@ -27,6 +33,8 @@ pub struct AppStateInner {
     pub selector: docker::ContainerSelector,
     /// Held for the duration of any update cycle. Scheduler: .lock().await; HTTP: .try_lock().
     pub update_lock: tokio::sync::Mutex<()>,
+    pub schedule_info: ScheduleInfo,
+    pub next_run_at: std::sync::Mutex<Option<chrono::DateTime<chrono::Utc>>>,
     #[cfg(feature = "web")]
     pub pool: Option<sqlx::SqlitePool>,
 }
@@ -245,6 +253,12 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
             .map(|s| s.trim().to_string())
             .unwrap_or_default()
     });
+    let next_run = state
+        .next_run_at
+        .lock()
+        .ok()
+        .and_then(|g| *g)
+        .map(|t| t.to_rfc3339());
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -252,6 +266,10 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
             "updating": updating,
             "version": VERSION,
             "hostname": hostname,
+            "schedule_mode": state.schedule_info.mode,
+            "schedule_interval_secs": state.schedule_info.interval_secs,
+            "schedule_cron": state.schedule_info.cron_expr,
+            "next_run_at": next_run,
         })),
     )
 }
