@@ -41,10 +41,12 @@ pub struct CycleProgress {
 ### 3. Add field to `AppStateInner`
 
 ```rust
-pub cycle_progress: std::sync::RwLock<Option<update::CycleProgress>>,
+pub cycle_progress: tokio::sync::RwLock<Option<update::CycleProgress>>,
 ```
 
 Initialised as `RwLock::new(None)` in `main.rs`.
+
+`tokio::sync::RwLock` required — write lock is held across `.await` points inside `run_cycle`.
 
 ### 4. Expose in `/v1/health`
 
@@ -72,14 +74,16 @@ pub struct UpdateEngine<'a> {
     docker:    &'a docker::DockerClient,
     registry:  &'a registry::RegistryClient,
     config:    &'a config::Config,
-    progress:  Option<Arc<std::sync::RwLock<Option<CycleProgress>>>>,
+    progress:  Option<Arc<tokio::sync::RwLock<Option<CycleProgress>>>>,
 }
 ```
 
 `new()` gains an optional `progress` parameter; a private `update_progress()` helper does
 the write under the lock so callers don't repeat boilerplate.
 
-### 6. Wire progress in `run_cycle_with_state` (`http.rs`)
+### 6. Wire progress in `run_cycle_with_state` and `post_update` (`http.rs`)
+
+Both call sites (`run_cycle_with_state` for the scheduler and `post_update` for HTTP-triggered cycles) must be wired identically — each creates `UpdateEngine` directly and holds `update_lock` for the full cycle duration.
 
 ```rust
 let engine = update::UpdateEngine::new(
@@ -88,33 +92,33 @@ let engine = update::UpdateEngine::new(
 );
 let report = engine.run_cycle(&selected).await;
 // clear progress after cycle ends
-*state.cycle_progress.write().unwrap() = None;
+*state.cycle_progress.write().await = None;
 ```
 
 ### 7. Phase A — update progress per container
 
-Before checking each container:
+Enumerate the loop (`for (i, container) in containers.iter().enumerate()`). Before checking each container:
 
 ```rust
 self.update_progress(CycleProgress {
     total: containers.len(),
-    scanned: i,              // 0-based index before this one
+    scanned: i,              // 0-based: containers checked so far
     current: container.name.clone(),
     phase: "scanning".into(),
     started_at,
 });
 ```
 
-After the check, increment `scanned` to `i + 1`.
+No final update after Phase A — Phase D's first write (with `scanned = stale.len()`) covers the transition.
 
-### 7. Phase D — update progress per update
+### 8. Phase D — update progress per update
 
 At the start of each stale-container update (before pull/stop/recreate):
 
 ```rust
 self.update_progress(CycleProgress {
-    total:      containers.len(),
-    scanned:    containers.len(),   // Phase A complete
+    total:      stale.len(),        // stale count, not full container count
+    scanned:    stale.len(),        // Phase A complete
     current:    container.name.clone(),
     phase:      "updating".into(),
     started_at,
@@ -127,7 +131,7 @@ self.update_progress(CycleProgress {
 
 ## Frontend — `web/src/stores/health.js`
 
-### 8. Extend health store
+### 9. Extend health store
 
 Add `cycle_progress: null` to the initial writable value. In `poll()`:
 
@@ -142,7 +146,7 @@ health.set({
 
 ## Frontend — `web/src/lib/NavDrawer.svelte`
 
-### 9. Pass progress to `CycleStatusCard`
+### 10. Pass progress to `CycleStatusCard`
 
 ```svelte
 <CycleStatusCard progress={$health.cycle_progress} watchedCount={containers.length} />
@@ -154,7 +158,7 @@ Remove the `running={$health.updating}` prop (card derives `running` from `progr
 
 ## Frontend — `web/src/lib/CycleStatusCard.svelte`
 
-### 10. Update props and running template
+### 11. Update props and running template
 
 Replace `running: bool` prop with `progress` (object or null). Derive `running` locally:
 
@@ -194,6 +198,22 @@ let elapsed = $derived(fmtElapsed(progress?.started_at));
 ```
 
 `fmtElapsed(isoStr)` computes `Date.now() - new Date(isoStr)` and formats as `0:42` or `1:23`.
+
+To drive re-computation between polls, add a 1 s tick store:
+
+```js
+import { readable } from 'svelte/store';
+const tick = readable(0, set => {
+  const id = setInterval(() => set(Date.now()), 1000);
+  return () => clearInterval(id);
+});
+```
+
+Reference `$tick` in the `elapsed` derived expression so Svelte re-evaluates every second:
+
+```js
+let elapsed = $derived(fmtElapsed(progress?.started_at, $tick));
+```
 
 ---
 
