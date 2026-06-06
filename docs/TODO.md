@@ -41,7 +41,17 @@
 
 ## UI
 
-- CycleStatusCard — "Next cycle" data source
-  - The plan says to show "Next cycle countdown, schedule interval, watched count." But the /v1/health endpoint only returns { updating, version, hostname }. There's no schedule interval, next-cycle ETA, or watched count. Currently using placeholder values.
 - CycleStatusCard — running state data
   - The running card in the design shows scanned, total, and current container name. The /v1/health endpoint only has updating: bool — no progress data.
+
+### Out of scope for v1
+
+- **Other panels** - Manual Update, Template Preview, Test Notifications pages
+- **Authentication** — Enforce existing `http_api.token` Bearer token on `/ui/*` and five new API endpoints. Add login page prompting for token, stores in `sessionStorage`. Add `401` redirect handling in Svelte fetch wrapper.
+- **History search and filtering** — Date range picker, outcome filter, container name search on dashboard table.
+- **Live cycle progress** — Replace 5-second health poll with Server-Sent Events for real-time container-by-container progress during running cycle.
+- **Notification target configuration UI** — View and edit notification settings from browser rather than editing config files directly.
+- Accent color picker (Ember, Teal, Indigo accents)
+- Server-side history search / filtering
+- Cleanup incomplete cycles in `cycles` table
+- Show count/list of _disabled_ containers excluded from processing
