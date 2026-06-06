@@ -258,12 +258,39 @@ Main content area of Dashboard.
 
 Wire frontend build into the release process.
 
-- `Dockerfile` (or `docker-bake.hcl`): add `pnpm install && pnpm build` step in the build stage; move `web/dist/` into the Rust build context before `cargo build --release --features web`
-- `.github/workflows/` (or equivalent CI): add a `build-web` job that runs `pnpm install && pnpm build`; existing Rust CI job gains `--features web` when building release artifacts
-- `web/.gitignore`: exclude `node_modules/`, `dist/`
-- Root `CLAUDE.md` `## Commands` section: add `pnpm install` and `pnpm build` entries
+**Dockerfiles — all 6** (`docker/bookworm/full`, `docker/bookworm/slim`, `docker/bullseye/full`, `docker/bullseye/slim`, `docker/trixie/full`, `docker/trixie/slim`):
 
-**Acceptance:** `docker build` produces an image where `GET /ui/` returns the Svelte bundle; CI passes on both feature modes.
+- Insert a new `node` build stage before the `rust` builder stage:
+  - Base image: `node:22-<release>` (or `node:22-<release>-slim` for slim variants)
+  - `WORKDIR /build/web`
+  - `COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./`
+  - `RUN npm install -g pnpm && pnpm install --frozen-lockfile`
+  - `COPY web/ ./`
+  - `RUN pnpm build`
+- In the `rust` builder stage, before `cargo build`:
+  - `COPY --from=node /build/web/dist ./web/dist`
+- Change `cargo build --profile release --locked` → `cargo build --profile release --locked --features web`
+
+**CI — new workflow `.github/workflows/web-build.yml`:**
+
+- Triggers: `push` to `main` and `pull_request` to `main`, path-filtered to `web/**` (same paths as `web-lint.yml` plus `web/vite.config.js`, `web/svelte.config.js`, `web/index.html`)
+- Single `build` job: `pnpm install --frozen-lockfile && pnpm build`; Node 22, `pnpm/action-setup`, `working-directory: web`
+
+**CI — `rust.yml` updates:**
+
+- `lint` job: `cargo clippy --all-targets -- -D warnings` → `cargo clippy --all-targets --features web -- -D warnings`
+- `build` matrix job: `cargo build --profile release` → `cargo build --profile release --features web`; same for both `cargo test` invocations
+
+**CI — `docker.yml` updates:**
+
+- `binary-build` job: `cargo build --profile release --locked` → `cargo build --profile release --locked --features web`; add frontend build steps before `cargo build` (install Node 22 via `actions/setup-node`, install pnpm, run `pnpm install --frozen-lockfile && pnpm build` in `web/`)
+
+**Other:**
+
+- `web/.gitignore`: exclude `node_modules/`, `dist/`
+- Root `CLAUDE.md` `## Commands` section: add `pnpm install` and `pnpm build` entries (note: run from `web/` directory)
+
+**Acceptance:** `docker build` produces an image where `GET /ui/` returns the Svelte bundle; CI passes on both feature modes; clippy checks feature-gated code.
 
 ---
 
