@@ -18,8 +18,8 @@ importers:
         specifier: ^9.0.0
         version: 9.0.0
       '@smui/drawer':
-        specifier: ^9.0.0
-        version: 9.0.0
+        specifier: ^9.0.1
+        version: 9.0.1
       '@smui/linear-progress':
         specifier: ^9.0.1
         version: 9.0.1
@@ -275,8 +275,8 @@ packages:
   '@smui/data-table@9.0.0':
     resolution: {integrity: sha512-4HZHd1ZDidPGwIknuaE3f/mGSf3ETbq5Z6wnznaSOgDI5WHDPBFDvDZ6opdEqurLZt/QfxK6WLo5MmK2djlqqQ==}
 
-  '@smui/drawer@9.0.0':
-    resolution: {integrity: sha512-aDFiO0JEwMOHjs7Gqq6Nx5uyYX7+Cx+g/MqMOqBIuFS1Vh9aw5JQpVNN442ubJlG1tQJCP/lkk+FfUvUQWqltA==}
+  '@smui/drawer@9.0.1':
+    resolution: {integrity: sha512-phz1mGvLK4yjUGK5HFktqmqsV0XiuOG1NhXOmy0Ow2faWyBo0dmJfvihM9l5EuI4boZNRXHZ0rJ2cuoZtghJEw==}
 
   '@smui/floating-label@9.0.1':
     resolution: {integrity: sha512-jiA+boj02qFRSzQood8lvFgBwAwoARco1tbvIA/zrmgfcMKO+/tS3wtxNxSRg4JIkdHLYkncGS4urMpKA48H0Q==}
@@ -295,6 +295,9 @@ packages:
 
   '@smui/list@9.0.0':
     resolution: {integrity: sha512-4c6hn7PW6BLH2ToeW4c6eEV/QD/GCCn1BBEeHIHrtIi0D3qOGHfw31Hg9UPvzDmgAbzKvOPd4BLBS4FS0VgnZA==}
+
+  '@smui/list@9.0.1':
+    resolution: {integrity: sha512-/9cNr8iEInqWvdhidYojHNP2a8mDxVqVVKaQMm3z2tBL2hPke5RV5F/nsrCGquWTEBZNjppNcE7FdAKbX9JS5A==}
 
   '@smui/menu-surface@9.0.0':
     resolution: {integrity: sha512-dSNQu26V0lY1jUvcLGpyD3SYpg/G0STCy7dodOQzcFR9Bh1weR/fSoRGrJRbhRkz68JjURSjuusa1ju7IdxRBg==}
@@ -1105,11 +1108,11 @@ snapshots:
       '@smui/select': 9.0.0
       '@smui/touch-target': 9.0.0
 
-  '@smui/drawer@9.0.0':
+  '@smui/drawer@9.0.1':
     dependencies:
-      '@smui/common': 9.0.0
-      '@smui/list': 9.0.0
-      '@smui/ripple': 9.0.0
+      '@smui/common': 9.0.1
+      '@smui/list': 9.0.1
+      '@smui/ripple': 9.0.1
 
   '@smui/floating-label@9.0.1':
     dependencies:
@@ -1139,6 +1142,11 @@ snapshots:
     dependencies:
       '@smui/common': 9.0.0
       '@smui/ripple': 9.0.0
+
+  '@smui/list@9.0.1':
+    dependencies:
+      '@smui/common': 9.0.1
+      '@smui/ripple': 9.0.1
 
   '@smui/menu-surface@9.0.0':
     dependencies:
