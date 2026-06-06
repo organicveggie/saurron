@@ -9,8 +9,8 @@
   let { variant = 'standard' } = $props();
 
   const PREVIEW_COUNT = 5;
-  let containers = [];
-  let showAll = false;
+  let containers = $state([]);
+  let showAll = $state(false);
 
   onMount(async () => {
     try {
