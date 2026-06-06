@@ -221,7 +221,7 @@ Summary strip at the top of Dashboard.
 
 ---
 
-### M8 — Frontend: Timeline feed, filters, search
+### M8 — Frontend: Timeline feed, filters, search ✓ DONE
 
 Main content area of Dashboard.
 
