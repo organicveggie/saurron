@@ -231,10 +231,10 @@ pub async fn run_cycle_with_state(state: &AppStateInner, trigger: &str) {
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
     #[cfg(feature = "web")]
-    if let Some(pool) = &state.pool {
-        if let Err(e) = crate::db::record_cycle(pool, &report, trigger).await {
-            error!(error = %e, trigger, "failed to persist cycle to database");
-        }
+    if let Some(pool) = &state.pool
+        && let Err(e) = crate::db::record_cycle(pool, &report, trigger).await
+    {
+        error!(error = %e, trigger, "failed to persist cycle to database");
     }
 }
 
@@ -310,10 +310,10 @@ async fn post_update(
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
     #[cfg(feature = "web")]
-    if let Some(pool) = &state.pool {
-        if let Err(e) = crate::db::record_cycle(pool, &report, "http_api").await {
-            error!(error = %e, trigger = "http_api", "failed to persist cycle to database");
-        }
+    if let Some(pool) = &state.pool
+        && let Err(e) = crate::db::record_cycle(pool, &report, "http_api").await
+    {
+        error!(error = %e, trigger = "http_api", "failed to persist cycle to database");
     }
 
     Json(report).into_response()
