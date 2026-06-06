@@ -50,10 +50,11 @@ pub fn parse_schedule_mode(config: &Config) -> Result<ScheduleMode> {
     }
 }
 
-pub async fn run_scheduler<F, Fut>(mode: ScheduleMode, run_cycle: F)
+pub async fn run_scheduler<F, Fut, N>(mode: ScheduleMode, run_cycle: F, on_next_run: N)
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = ()>,
+    N: Fn(Option<chrono::DateTime<chrono::Utc>>),
 {
     match mode {
         ScheduleMode::RunOnce => {
@@ -61,14 +62,20 @@ where
         }
         ScheduleMode::Interval(duration) => loop {
             run_cycle().await;
-            if let Some(next) = ScheduleMode::Interval(duration).next_run() {
-                tracing::info!(next_run = %next, "next run scheduled");
+            let next = chrono::Duration::from_std(duration)
+                .ok()
+                .map(|d| chrono::Utc::now() + d);
+            on_next_run(next);
+            if let Some(t) = next {
+                tracing::info!(next_run = %t, "next run scheduled");
             }
             tokio::time::sleep(duration).await;
         },
         ScheduleMode::Cron(schedule) => loop {
             let now = chrono::Utc::now();
             if let Some(next) = schedule.as_ref().upcoming(chrono::Utc).next() {
+                on_next_run(Some(next));
+                tracing::info!(next_run = %next, "next run scheduled");
                 let delta = next - now;
                 if let Ok(wait) = delta.to_std() {
                     tokio::time::sleep(wait).await;
@@ -78,9 +85,6 @@ where
                 break;
             }
             run_cycle().await;
-            if let Some(next) = schedule.as_ref().upcoming(chrono::Utc).next() {
-                tracing::info!(next_run = %next, "next run scheduled");
-            }
         },
     }
 }
@@ -191,12 +195,16 @@ mod tests {
 
         let count = Arc::new(AtomicUsize::new(0));
         let count2 = Arc::clone(&count);
-        run_scheduler(ScheduleMode::RunOnce, move || {
-            let c = Arc::clone(&count2);
-            async move {
-                c.fetch_add(1, Ordering::SeqCst);
-            }
-        })
+        run_scheduler(
+            ScheduleMode::RunOnce,
+            move || {
+                let c = Arc::clone(&count2);
+                async move {
+                    c.fetch_add(1, Ordering::SeqCst);
+                }
+            },
+            |_| {},
+        )
         .await;
         assert_eq!(count.load(Ordering::SeqCst), 1);
     }
@@ -216,6 +224,7 @@ mod tests {
                     c.fetch_add(1, Ordering::SeqCst);
                 }
             },
+            |_| {},
         ));
         tokio::time::sleep(Duration::from_millis(50)).await;
         handle.abort();
