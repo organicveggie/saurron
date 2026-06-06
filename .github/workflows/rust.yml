@@ -27,7 +27,7 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets --features web -- -D warnings
 
   build:
     strategy:
@@ -52,14 +52,14 @@ jobs:
           toolchain: stable
       - uses: Swatinem/rust-cache@v2
       - name: Build binaries in "${{ env.RUST_BUILD_TARGET }}" mode
-        run: cargo build --profile ${{ env.RUST_BUILD_TARGET }}
+        run: cargo build --profile ${{ env.RUST_BUILD_TARGET }} --features web
       - name: Set Output
         id: set-output
         run: echo "release_built=true" >> $GITHUB_OUTPUT
       - name: Run tests in "${{ env.RUST_BUILD_TARGET }}" mode
-        run: cargo test --profile ${{ env.RUST_BUILD_TARGET }}
+        run: cargo test --profile ${{ env.RUST_BUILD_TARGET }} --features web
       - name: Run integration tests
-        run: cargo test --profile ${{ env.RUST_BUILD_TARGET }} --test integration -- --include-ignored
+        run: cargo test --profile ${{ env.RUST_BUILD_TARGET }} --features web --test integration -- --include-ignored
 
   docker-build:
     runs-on: ubuntu-latest
