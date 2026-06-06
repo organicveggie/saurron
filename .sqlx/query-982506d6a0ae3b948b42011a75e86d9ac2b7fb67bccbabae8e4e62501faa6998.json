@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id, cycle_id, name, old_image, new_image, outcome FROM cycle_containers WHERE cycle_id = ? ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cycle_containers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "cycle_id",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "cycle_containers",
+            "name": "cycle_id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cycle_containers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "old_image",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cycle_containers",
+            "name": "old_image"
+          }
+        }
+      },
+      {
+        "name": "new_image",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cycle_containers",
+            "name": "new_image"
+          }
+        }
+      },
+      {
+        "name": "outcome",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "cycle_containers",
+            "name": "outcome"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "982506d6a0ae3b948b42011a75e86d9ac2b7fb67bccbabae8e4e62501faa6998"
+}
