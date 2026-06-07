@@ -11,7 +11,7 @@ updates:
       interval: "weekly"
 
   - package-ecosystem: "bundler"
-    directory: "/docs"
+    directory: "/docsite"
     schedule:
       interval: "weekly"
 

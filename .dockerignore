@@ -3,7 +3,7 @@
 .devcontainer/
 target/
 tests/
-docs/
+docsite/
 *.md
 lcov.info
 tarpaulin-report.*
