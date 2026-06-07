@@ -41,15 +41,15 @@ jobs:
         run: |
           latest=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
           if [ -z "$latest" ]; then
-            echo "No stable tag found; using existing docs/_data/release.yml"
+            echo "No stable tag found; using existing docsite/_data/release.yml"
             exit 0
           fi
           version="${latest#v}"
           major=$(echo "$version" | cut -d. -f1)
           minor=$(echo "$version" | cut -d. -f2)
-          echo "version: \"$version\""           > docs/_data/release.yml
-          echo "major: \"$major\""              >> docs/_data/release.yml
-          echo "major_minor: \"${major}.${minor}\"" >> docs/_data/release.yml
+          echo "version: \"$version\""           > docsite/_data/release.yml
+          echo "major: \"$major\""              >> docsite/_data/release.yml
+          echo "major_minor: \"${major}.${minor}\"" >> docsite/_data/release.yml
           echo "Generated release data for $version"
 
       - name: Setup Ruby
@@ -58,7 +58,7 @@ jobs:
           ruby-version: '4.0' # Not needed with a .ruby-version file
           bundler-cache: true # runs 'bundle install' and caches installed gems automatically
           cache-version: 0 # Increment this number if you need to re-download cached gems
-          working-directory: ./docs
+          working-directory: ./docsite
 
       - name: Setup Pages
         id: pages
@@ -67,7 +67,7 @@ jobs:
       - name: Build with Jekyll
         # Outputs to the './_site' directory by default
         run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
-        working-directory: ./docs
+        working-directory: ./docsite
         env:
           JEKYLL_ENV: production
 
@@ -75,7 +75,7 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           # Reads from the './_site' directory by default
-          path: ./docs/_site
+          path: ./docsite/_site
 
   # Deployment job
   deploy:

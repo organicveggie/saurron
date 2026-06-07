@@ -72,14 +72,14 @@ jobs:
             printf '```toml\n'
             ./target/debug/saurron --generate-config
             printf '```\n'
-          } > docs/collections/_reference/sample-config.md
+          } > docsite/collections/_reference/sample-config.md
 
       - name: Commit if changed
         id: commit
         run: |
           git config user.name "commit-release-bot[bot]"
           git config user.email "commit-release-bot[bot]@users.noreply.github.com"
-          git add docs/collections/_reference/sample-config.md
+          git add docsite/collections/_reference/sample-config.md
           if git diff --staged --quiet; then
             echo "No changes to sample-config.md"
             echo "changed=false" >> "$GITHUB_OUTPUT"

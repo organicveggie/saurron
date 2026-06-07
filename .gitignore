@@ -30,7 +30,7 @@ tarpaulin-report.html
 
 *.profraw
 
-docs/_local_config.yml
+docsite/_local_config.yml
 
 **/devcontainer-lock.json
 
