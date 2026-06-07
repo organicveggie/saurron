@@ -31,7 +31,7 @@ importers:
         version: 9.0.1
       material-symbols:
         specifier: '*'
-        version: 0.44.11
+        version: 0.44.12
       svelte:
         specifier: ^5.56.1
         version: 5.56.1
@@ -263,9 +263,6 @@ packages:
   '@smui/checkbox@9.0.1':
     resolution: {integrity: sha512-6G75+u/iQyQP62WAZBJjnyKDpCQ0vToFwRxHPVftGgAUc2c3y1Czo42820zuQxga1DytfFY8P0pHr+yPW9bhRA==}
 
-  '@smui/common@9.0.0':
-    resolution: {integrity: sha512-m9N1RybCU3rVYD2ozawL1KhmuVo0TcftB+Dp9wyIXoFQQQabWocrnUYKJTmMHrehubxo0xlGA2PnarXGLhBLzA==}
-
   '@smui/common@9.0.1':
     resolution: {integrity: sha512-tnjQ4n3xmEMQdKtr5qHwl/t4pmjU9ntbit/4eD0N2vsF9kzjql3WDBAf6vhQKMZK5c1SGQ1vKRmoU5tv5tCTSw==}
 
@@ -299,9 +296,6 @@ packages:
   '@smui/notched-outline@9.0.1':
     resolution: {integrity: sha512-21HgAXxjrAPjHNskH3QtA7FFcwjXuvnbh0NVsM8XckymLI3C/UeoooZACB8AEeVN37VbSQ6Z3pcdBgHQAZGLVg==}
 
-  '@smui/ripple@9.0.0':
-    resolution: {integrity: sha512-eAtfRGIuLh+2mJELB1wtTVFsK8C1IGQQ+IyHjVls9QcQBE3DWNS159kNlx2apFgDCsG89xGSX2+wNUm2vliR5g==}
-
   '@smui/ripple@9.0.1':
     resolution: {integrity: sha512-GHUfIwFlTUy1N3bfjiWC0Rq2jBoDv8XaUhS0qafI2ul1IqkQRxlbQmqM/UTxHvF7rudhDPvr0zol1rPUudWajg==}
 
@@ -313,9 +307,6 @@ packages:
 
   '@smui/textfield@9.0.1':
     resolution: {integrity: sha512-LOG2M/5lk5tYsO5uSHukpOw2NvF7E0LYz/rL11rIOsWYoAUK2I9DTupxTcyRyOA8aPDO4a2tS7fXDFgz4/Mi5Q==}
-
-  '@smui/touch-target@9.0.0':
-    resolution: {integrity: sha512-+0usvtwF2aOoqEWFPr8UTMLsWbAS+DjlVHmXk57h+9jBICy3KRpd5tqup92zWeYPfO4sCh6VPYP7Xw4axJk++g==}
 
   '@smui/touch-target@9.0.1':
     resolution: {integrity: sha512-anXbPcWO0zdguq19atMpea3j6TO5Xlb3yppHuvm5jczqgraZN919Lz1Hqs9AdpDp6Kw4773lNEK+JlWa+g4Rog==}
@@ -672,8 +663,8 @@ packages:
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
-  material-symbols@0.44.11:
-    resolution: {integrity: sha512-xYOSzQkoM54dANcCWaAHVayHTDGnhS7JjpE+UuI+xGzE9OLZd8VLuYp2nbVCvSj8gPDTscUHGBqvZoBAYMzYvw==}
+  material-symbols@0.44.12:
+    resolution: {integrity: sha512-lZkS9BwISNU2Jbup+IlwZrr9z1oAK6zx38qPpe7mNzkXwiIEnQaxPz1Sf3bNZ0MX15LNlJQNjKI3MWLgmo83+Q==}
 
   minimatch@10.2.5:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
@@ -1073,10 +1064,6 @@ snapshots:
       '@smui/ripple': 9.0.1
       '@smui/touch-target': 9.0.1
 
-  '@smui/common@9.0.0':
-    dependencies:
-      safevalues: 1.2.0
-
   '@smui/common@9.0.1':
     dependencies:
       safevalues: 1.2.0
@@ -1138,10 +1125,6 @@ snapshots:
       '@smui/common': 9.0.1
       '@smui/floating-label': 9.0.1
 
-  '@smui/ripple@9.0.0':
-    dependencies:
-      '@smui/common': 9.0.0
-
   '@smui/ripple@9.0.1':
     dependencies:
       '@smui/common': 9.0.1
@@ -1172,10 +1155,6 @@ snapshots:
       '@smui/line-ripple': 9.0.1
       '@smui/notched-outline': 9.0.1
       '@smui/ripple': 9.0.1
-
-  '@smui/touch-target@9.0.0':
-    dependencies:
-      '@smui/common': 9.0.0
 
   '@smui/touch-target@9.0.1':
     dependencies:
@@ -1490,7 +1469,7 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  material-symbols@0.44.11: {}
+  material-symbols@0.44.12: {}
 
   minimatch@10.2.5:
     dependencies:
