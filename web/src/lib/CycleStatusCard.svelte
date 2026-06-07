@@ -1,7 +1,24 @@
 <script>
+  import { readable } from 'svelte/store';
   import { health } from '../stores/health.js';
 
-  let { running = false, watchedCount = 0 } = $props();
+  let { progress = null, watchedCount = 0 } = $props();
+  let running = $derived(progress !== null);
+
+  const tick = readable(0, (set) => {
+    const id = setInterval(() => set(Date.now()), 1000);
+    return () => clearInterval(id);
+  });
+
+  function fmtElapsed(isoStr) {
+    if (!isoStr) return '0:00';
+    const ms = Date.now() - new Date(isoStr).getTime();
+    if (ms < 0) return '0:00';
+    const totalSecs = Math.floor(ms / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
+    return `${mins}:${String(secs).padStart(2, '0')}`;
+  }
 
   function fmtCountdown(isoStr) {
     if (!isoStr) return '—';
@@ -28,6 +45,10 @@
     return '—';
   }
 
+  let pct = $derived(
+    progress?.total > 0 ? Math.round((progress.scanned / progress.total) * 100) : 0,
+  );
+  let elapsed = $derived(($tick, fmtElapsed(progress?.started_at)));
   let countdown = $derived(fmtCountdown($health.next_run_at));
   let sched = $derived(scheduleLabel($health));
   let sub = $derived(`${sched} · ${watchedCount} watched`);
@@ -38,8 +59,15 @@
     <div class="row">
       <span class="running-dot"></span>
       <span class="type-label" style="color: var(--primary)">Cycle running</span>
+      <div style="flex:1"></div>
+      <span class="type-mono elapsed">{elapsed}</span>
     </div>
     <div class="running-bar"></div>
+    <div class="row justify-between">
+      <span class="type-mono current">{progress.current}</span>
+      <span class="type-mono count">{progress.scanned}/{progress.total}</span>
+    </div>
+    <div class="type-body-sm muted">{progress.phase} · {pct}% complete</div>
   </div>
 {:else}
   <div class="card outlined cycle-card">
@@ -71,8 +99,36 @@
     gap: 8px;
   }
 
+  .justify-between {
+    justify-content: space-between;
+  }
+
   .countdown {
     font-size: 18px;
     font-weight: 600;
+  }
+
+  .elapsed {
+    font-size: 12px;
+    color: var(--on-surface-muted);
+  }
+
+  .current {
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .count {
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .muted {
+    color: var(--on-surface-muted);
+    font-size: 11px;
   }
 </style>

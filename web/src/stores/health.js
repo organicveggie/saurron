@@ -8,6 +8,7 @@ export const health = writable({
   schedule_interval_secs: null,
   schedule_cron: null,
   next_run_at: null,
+  cycle_progress: null,
 });
 
 async function poll() {
@@ -23,6 +24,7 @@ async function poll() {
         schedule_interval_secs: d.schedule_interval_secs ?? null,
         schedule_cron: d.schedule_cron ?? null,
         next_run_at: d.next_run_at ?? null,
+        cycle_progress: d.cycle_progress ?? null,
       });
     }
   } catch {

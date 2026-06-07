@@ -312,6 +312,7 @@ async fn main() -> anyhow::Result<()> {
         update_lock: tokio::sync::Mutex::new(()),
         schedule_info,
         next_run_at: std::sync::Mutex::new(None),
+        cycle_progress: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
         #[cfg(feature = "web")]
         pool: db_pool,
     });

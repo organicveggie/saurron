@@ -411,6 +411,15 @@ pub struct ContainerReport {
     pub new_image: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct CycleProgress {
+    pub total: usize,
+    pub scanned: usize,
+    pub current: String,
+    pub phase: String,
+    pub started_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Default, serde::Serialize)]
 pub struct SessionReport {
     pub containers: Vec<ContainerReport>,
@@ -590,6 +599,7 @@ pub struct UpdateEngine<'a> {
     docker: &'a docker::DockerClient,
     registry: &'a registry::RegistryClient,
     config: &'a config::Config,
+    progress: Option<std::sync::Arc<tokio::sync::RwLock<Option<CycleProgress>>>>,
 }
 
 impl<'a> UpdateEngine<'a> {
@@ -597,11 +607,19 @@ impl<'a> UpdateEngine<'a> {
         docker: &'a docker::DockerClient,
         registry: &'a registry::RegistryClient,
         config: &'a config::Config,
+        progress: Option<std::sync::Arc<tokio::sync::RwLock<Option<CycleProgress>>>>,
     ) -> Self {
         Self {
             docker,
             registry,
             config,
+            progress,
+        }
+    }
+
+    async fn update_progress(&self, p: CycleProgress) {
+        if let Some(lock) = &self.progress {
+            *lock.write().await = Some(p);
         }
     }
 
@@ -621,7 +639,15 @@ impl<'a> UpdateEngine<'a> {
 
         // Phase A: scan all containers for staleness
         let mut stale: Vec<(docker::ContainerInfo, registry::StaleInfo)> = Vec::new();
-        for container in containers {
+        for (i, container) in containers.iter().enumerate() {
+            self.update_progress(CycleProgress {
+                total: containers.len(),
+                scanned: i,
+                current: container.name.clone(),
+                phase: "scanning".into(),
+                started_at,
+            })
+            .await;
             match self.check_freshness(container).await {
                 registry::FreshnessResult::UpToDate => {
                     debug!(container = %container.name, "image up to date");
@@ -690,6 +716,7 @@ impl<'a> UpdateEngine<'a> {
         // Phase D: update each stale container in dependency order.
         // Self-container (if detected) is deferred to after all others.
         let mut self_update_queue: Vec<&docker::ContainerInfo> = Vec::new();
+        let update_total = ordered.len();
 
         for container in &ordered {
             let Some(stale_info) = stale_map.get(&container.name) else {
@@ -709,6 +736,14 @@ impl<'a> UpdateEngine<'a> {
                 continue;
             }
 
+            self.update_progress(CycleProgress {
+                total: update_total,
+                scanned: update_total,
+                current: container.name.clone(),
+                phase: "updating".into(),
+                started_at,
+            })
+            .await;
             let result = self.update_one(container, stale_info, inspect).await;
             match &result {
                 UpdateResult::Failed(e) => {
@@ -730,6 +765,14 @@ impl<'a> UpdateEngine<'a> {
             let Some(inspect) = inspect_map.get(&container.name) else {
                 continue;
             };
+            self.update_progress(CycleProgress {
+                total: update_total,
+                scanned: update_total,
+                current: container.name.clone(),
+                phase: "updating".into(),
+                started_at,
+            })
+            .await;
             info!(container = %container.name, "beginning self-update");
             let result = self.self_update_one(container, stale_info, inspect).await;
             if let UpdateResult::Failed(ref e) = result {
