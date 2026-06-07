@@ -35,6 +35,7 @@ pub struct AppStateInner {
     pub update_lock: tokio::sync::Mutex<()>,
     pub schedule_info: ScheduleInfo,
     pub next_run_at: std::sync::Mutex<Option<chrono::DateTime<chrono::Utc>>>,
+    pub cycle_progress: std::sync::Arc<tokio::sync::RwLock<Option<update::CycleProgress>>>,
     #[cfg(feature = "web")]
     pub pool: Option<sqlx::SqlitePool>,
 }
@@ -233,9 +234,15 @@ pub async fn run_cycle_with_state(state: &AppStateInner, trigger: &str) {
         }
     };
     let selected = state.docker.select_containers(&all, &state.selector);
-    let report = update::UpdateEngine::new(&state.docker, &state.registry, &state.config)
-        .run_cycle(&selected)
-        .await;
+    let report = update::UpdateEngine::new(
+        &state.docker,
+        &state.registry,
+        &state.config,
+        Some(std::sync::Arc::clone(&state.cycle_progress)),
+    )
+    .run_cycle(&selected)
+    .await;
+    *state.cycle_progress.write().await = None;
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;
     #[cfg(feature = "web")]
@@ -259,6 +266,7 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
         .ok()
         .and_then(|g| *g)
         .map(|t| t.to_rfc3339());
+    let cycle_progress = state.cycle_progress.read().await.clone();
     (
         StatusCode::OK,
         Json(serde_json::json!({
@@ -270,6 +278,7 @@ async fn health(State(state): State<AppState>) -> impl IntoResponse {
             "schedule_interval_secs": state.schedule_info.interval_secs,
             "schedule_cron": state.schedule_info.cron_expr,
             "next_run_at": next_run,
+            "cycle_progress": cycle_progress,
         })),
     )
 }
@@ -321,9 +330,15 @@ async fn post_update(
         selected.retain(|c| images.iter().any(|img| c.image.starts_with(img.as_str())));
     }
 
-    let report = update::UpdateEngine::new(&state.docker, &state.registry, &state.config)
-        .run_cycle(&selected)
-        .await;
+    let report = update::UpdateEngine::new(
+        &state.docker,
+        &state.registry,
+        &state.config,
+        Some(std::sync::Arc::clone(&state.cycle_progress)),
+    )
+    .run_cycle(&selected)
+    .await;
+    *state.cycle_progress.write().await = None;
 
     metrics::record_cycle(&report);
     notifications::dispatch(&state.config.notifications, &report).await;

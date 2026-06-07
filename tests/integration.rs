@@ -356,7 +356,7 @@ async fn update_cycle_updates_stale_container() {
     );
 
     // 4. Run one update cycle.
-    let report = UpdateEngine::new(&docker, &registry, &config)
+    let report = UpdateEngine::new(&docker, &registry, &config, None)
         .run_cycle(&selected)
         .await;
 
@@ -467,6 +467,7 @@ async fn post_update_via_http_records_scan_cycle_metric() {
             cron_expr: None,
         },
         next_run_at: std::sync::Mutex::new(None),
+        cycle_progress: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
         #[cfg(feature = "web")]
         pool: None,
     });
@@ -614,6 +615,7 @@ async fn post_update_via_http_dispatches_webhook_on_update() {
             cron_expr: None,
         },
         next_run_at: std::sync::Mutex::new(None),
+        cycle_progress: std::sync::Arc::new(tokio::sync::RwLock::new(None)),
         #[cfg(feature = "web")]
         pool: None,
     });
