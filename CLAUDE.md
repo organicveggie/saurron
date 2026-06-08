@@ -26,6 +26,8 @@ cargo tarpaulin --ignore-tests -o Html -o Lcov --timeout 240 --engine llvm
 # Frontend (run from web/)
 pnpm install                  # install dependencies
 pnpm build                    # production build → web/dist/
+pnpm test                     # run unit + browser test projects once
+pnpm test:coverage            # run tests with coverage (text + lcov + html)
 ```
 
 Build script (`build.rs`) embed version string from `SAURRON_BUILD_VERSION` env var (default `v0.0.0-unknown`). Access at runtime via `SAURRON_VERSION` compile-time env var.
