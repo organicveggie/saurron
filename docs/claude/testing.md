@@ -13,7 +13,9 @@
 ### 1. Tooling
 
 * **Unit & Component Testing:** [Vitest](https://vitest.dev/)
+  * Colocate next to the code they test
 * **End-to-End (E2E) Testing:** [Playwright](https://playwright.dev/)
+  * Isolate end-to-end (E2E) tests in a dedicated top-level directory: `e2e`
 
 ### 2. Philosophy
 
