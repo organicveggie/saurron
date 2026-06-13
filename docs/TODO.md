@@ -41,8 +41,8 @@
 
 ## UI
 
-- CycleStatusCard — running state data
-  - The running card in the design shows scanned, total, and current container name. The /v1/health endpoint only has updating: bool — no progress data.
+- ARIA roles on everything
+- A11y support
 
 ### Out of scope for v1
 
