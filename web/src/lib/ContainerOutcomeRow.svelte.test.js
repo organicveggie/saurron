@@ -30,37 +30,35 @@ describe('ContainerOutcomeRow', () => {
 
   it('renders old image tag', async () => {
     const screen = render(ContainerOutcomeRow, { container: withImages });
-    await expect.element(screen.container.querySelectorAll('.image-ref')[0]).toHaveTextContent(
-      '1.3.0',
-    );
+    await expect
+      .element(screen.container.querySelectorAll('.image-ref')[0])
+      .toHaveTextContent('1.3.0');
   });
 
   it('renders new image tag when new_image is present', async () => {
     const screen = render(ContainerOutcomeRow, { container: withImages });
-    await expect.element(screen.container.querySelectorAll('.image-ref')[1]).toHaveTextContent(
-      '1.4.0',
-    );
+    await expect
+      .element(screen.container.querySelectorAll('.image-ref')[1])
+      .toHaveTextContent('1.4.0');
   });
 
   it('renders arrow separator', async () => {
     const screen = render(ContainerOutcomeRow, { container: withImages });
-    await expect.element(screen.container.querySelector('.arrow-icon')).toHaveTextContent(
-      'arrow_forward',
-    );
+    await expect
+      .element(screen.container.querySelector('.arrow-icon'))
+      .toHaveTextContent('arrow_forward');
   });
 
   it('renders reason when new_image is absent', async () => {
     const screen = render(ContainerOutcomeRow, { container: failedNoNew });
-    await expect.element(screen.container.querySelectorAll('.image-ref')[1]).toHaveTextContent(
-      'health check timed out',
-    );
+    await expect
+      .element(screen.container.querySelectorAll('.image-ref')[1])
+      .toHaveTextContent('health check timed out');
   });
 
   it('renders em-dash when new_image and reason are both absent', async () => {
     const screen = render(ContainerOutcomeRow, { container: noReason });
-    await expect.element(screen.container.querySelectorAll('.image-ref')[1]).toHaveTextContent(
-      '—',
-    );
+    await expect.element(screen.container.querySelectorAll('.image-ref')[1]).toHaveTextContent('—');
   });
 
   it.each([
@@ -78,6 +76,8 @@ describe('ContainerOutcomeRow', () => {
     const screen = render(ContainerOutcomeRow, {
       container: { ...withImages, outcome: 'mystery' },
     });
-    expect(screen.container.querySelector('.dot').getAttribute('style')).toContain('var(--neutral)');
+    expect(screen.container.querySelector('.dot').getAttribute('style')).toContain(
+      'var(--neutral)',
+    );
   });
 });
