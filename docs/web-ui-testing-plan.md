@@ -132,6 +132,21 @@ Browser-mode, ARIA-locator-driven:
   running branch renders elapsed timer (fake timers + `$tick`), `phase`/`pct`/`current`/
   `count`. Mock the `health` store import.
 
+**M4 implementation decisions:**
+
+- **StatCard snippet props** — `badge`/`chart` are Svelte 5 snippet props; plain `.test.js`
+  cannot define snippets. Solution: `src/test/wrappers/StatCardWithSnippets.svelte` passes
+  hardcoded `<span class="test-badge">` / `<span class="test-chart">` snippets and forwards
+  all other props via `{...props}`. Absence tests use `StatCard` directly (no wrapper).
+- **FilterDropdown outside-click** — `await userEvent.click(document.body)` (imported from
+  `@vitest/browser/context`) fires `mousedown` on `<body>`; `wrapEl.contains(body)` is
+  `false` so the document handler sets `open = false`.
+- **CycleStatusCard `health` mock** — `vi.hoisted()` creates a minimal hand-rolled store
+  (subscribe/set) before module mocks run; `vi.mock('../stores/health.js', () => ({ health:
+  mockHealth }))` uses that reference. `vi.useFakeTimers()` + `vi.setSystemTime()` control
+  `Date.now()` for elapsed/countdown assertions. For idle tests `next_run_at: null` (→ `—`)
+  avoids time-sensitive countdown checks; one dedicated test sets a specific fake time.
+
 ## Milestone 5 — Navigation chrome
 
 **Commit**: `test(web): cover navigation chrome components`
