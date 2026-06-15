@@ -84,79 +84,80 @@
   </nav>
 {:else}
   <nav class="standard">
-    <div class="header">
-      <div style="color: var(--primary)">
-        <svg width="28" height="28" viewBox="0 0 40 40" aria-label="Saurron" fill="none">
-          <path
-            d="M20 6 C 30 6, 36 14, 38 20 C 36 26, 30 34, 20 34 C 10 34, 4 26, 2 20 C 4 14, 10 6, 20 6 Z"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linejoin="round"
-          />
-          <ellipse cx="20" cy="20" rx="4" ry="9" fill="currentColor" />
-          <ellipse cx="20" cy="20" rx="1.5" ry="5" fill="var(--surface)" />
-        </svg>
-      </div>
-      <div class="header-text">
-        <div class="header-title-row">
-          <span class="type-h2">Saurron</span>
-          <RunningChip running={$health.updating} />
+    <div class="scroll-area">
+      <div class="header">
+        <div style="color: var(--primary)">
+          <svg width="28" height="28" viewBox="0 0 40 40" aria-label="Saurron" fill="none">
+            <path
+              d="M20 6 C 30 6, 36 14, 38 20 C 36 26, 30 34, 20 34 C 10 34, 4 26, 2 20 C 4 14, 10 6, 20 6 Z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linejoin="round"
+            />
+            <ellipse cx="20" cy="20" rx="4" ry="9" fill="currentColor" />
+            <ellipse cx="20" cy="20" rx="1.5" ry="5" fill="var(--surface)" />
+          </svg>
         </div>
-        <div class="type-mono header-meta">
-          {$health.version || '—'} · {$health.hostname || '—'}
-        </div>
-      </div>
-    </div>
-
-    <div class="nav-items">
-      {#each NAV_ITEMS as item (item.route)}
-        <button
-          class="nav-item"
-          class:nav-item-active={router.location === item.route}
-          onclick={() => push(item.route)}
-        >
-          <span class="ms" class:fill={router.location === item.route} style="font-size: 22px"
-            >{item.icon}</span
-          >
-          <span class="nav-label">{item.label}</span>
-        </button>
-      {/each}
-    </div>
-
-    <div class="watched">
-      <div class="type-overline">Watched</div>
-      <div class="watched-list">
-        {#each visibleContainers as c (c.name)}
-          <div class="watched-item">
-            <span class="state-dot" style="background: {stateColor(c.state)}"></span>
-            <span class="type-mono watched-name">{c.name}</span>
-            {#if c.state === 'monitor_only'}
-              <span
-                class="ms"
-                title="monitor-only"
-                style="font-size: 14px; color: var(--on-surface-muted)">visibility</span
-              >
-            {:else if c.state === 'pinned'}
-              <span
-                class="ms"
-                title="digest pinned"
-                style="font-size: 14px; color: var(--on-surface-muted)">lock</span
-              >
-            {/if}
+        <div class="header-text">
+          <div class="header-title-row">
+            <span class="type-h2">Saurron</span>
+            <RunningChip running={$health.updating} />
           </div>
-        {/each}
-        {#if !showAll && hiddenCount > 0}
-          <button class="show-toggle" onclick={() => (showAll = true)}>
-            + {hiddenCount} more…
+          <div class="type-mono header-meta">
+            {$health.version || '—'} · {$health.hostname || '—'}
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-items">
+        {#each NAV_ITEMS as item (item.route)}
+          <button
+            class="nav-item"
+            class:nav-item-active={router.location === item.route}
+            onclick={() => push(item.route)}
+          >
+            <span class="ms" class:fill={router.location === item.route} style="font-size: 22px"
+              >{item.icon}</span
+            >
+            <span class="nav-label">{item.label}</span>
           </button>
-        {:else if showAll && containers.length > PREVIEW_COUNT}
-          <button class="show-toggle" onclick={() => (showAll = false)}>Show less</button>
-        {/if}
+        {/each}
+      </div>
+
+      <div class="watched">
+        <div class="type-overline">Watched</div>
+        <div class="watched-list">
+          {#each visibleContainers as c (c.name)}
+            <div class="watched-item">
+              <span class="state-dot" style="background: {stateColor(c.state)}"></span>
+              <span class="type-mono watched-name">{c.name}</span>
+              {#if c.state === 'monitor_only'}
+                <span
+                  class="ms"
+                  title="monitor-only"
+                  style="font-size: 14px; color: var(--on-surface-muted)">visibility</span
+                >
+              {:else if c.state === 'pinned'}
+                <span
+                  class="ms"
+                  title="digest pinned"
+                  style="font-size: 14px; color: var(--on-surface-muted)">lock</span
+                >
+              {/if}
+            </div>
+          {/each}
+          {#if !showAll && hiddenCount > 0}
+            <button class="show-toggle" onclick={() => (showAll = true)}>
+              + {hiddenCount} more…
+            </button>
+          {:else if showAll && containers.length > PREVIEW_COUNT}
+            <button class="show-toggle" onclick={() => (showAll = false)}>Show less</button>
+          {/if}
+        </div>
       </div>
     </div>
 
-    <div class="spacer"></div>
     <CycleStatusCard progress={$health.cycle_progress} watchedCount={containers.length} />
   </nav>
 {/if}
@@ -241,6 +242,11 @@
     display: flex;
     flex-direction: column;
     padding: 14px 12px;
+    overflow: hidden;
+  }
+
+  .scroll-area {
+    flex: 1;
     overflow-y: auto;
   }
 
