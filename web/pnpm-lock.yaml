@@ -31,7 +31,7 @@ importers:
         version: 9.0.1
       material-symbols:
         specifier: '*'
-        version: 0.44.12
+        version: 0.45.1
       svelte:
         specifier: ^5.56.3
         version: 5.56.3
@@ -954,8 +954,8 @@ packages:
     resolution: {integrity: sha512-hXdUTZYIVOt1Ex//jAQi+wTZZpUpwBj/0QsOzqegb3rGMMeJiSEu5xLHnYfBrRV4RH2+OCSOO95Is/7x1WJ4bw==}
     engines: {node: '>=10'}
 
-  material-symbols@0.44.12:
-    resolution: {integrity: sha512-lZkS9BwISNU2Jbup+IlwZrr9z1oAK6zx38qPpe7mNzkXwiIEnQaxPz1Sf3bNZ0MX15LNlJQNjKI3MWLgmo83+Q==}
+  material-symbols@0.45.1:
+    resolution: {integrity: sha512-iQibeoKymxHthNqTjYg/jCN2pRySFQ+DAD0sYK9FS7rUpf38i1qR3N4I1jfi/bLS5qdEKvkkJAvf2mE89amSZw==}
 
   minimatch@10.2.5:
     resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
@@ -2245,7 +2245,7 @@ snapshots:
     dependencies:
       semver: 7.8.1
 
-  material-symbols@0.44.12: {}
+  material-symbols@0.45.1: {}
 
   minimatch@10.2.5:
     dependencies:
