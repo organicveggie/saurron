@@ -39,7 +39,7 @@
     "msw": "^2.14.6",
     "playwright": "^1.60.0",
     "prettier": "^3.8.4",
-    "prettier-plugin-svelte": "^4.1.0",
+    "prettier-plugin-svelte": "^4.1.1",
     "vite": "^8.0.0",
     "vitest": "^4.1.8",
     "vitest-browser-svelte": "^2.1.1"
