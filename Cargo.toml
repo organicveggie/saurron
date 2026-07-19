@@ -11,7 +11,7 @@ web = ["dep:sqlx", "dep:include_dir"]
 anyhow = "1"
 axum = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
-cron = "0.16"
+cron = "0.17"
 futures = "0.3"
 bollard = { version = "0.20", features = ["ssl"] }
 clap = { version = "4", features = ["derive", "env"] }
