@@ -34,7 +34,7 @@
     "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^10.6.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-svelte": "^3.19.0",
+    "eslint-plugin-svelte": "^3.22.0",
     "globals": "^17.8.0",
     "msw": "^2.14.6",
     "playwright": "^1.61.1",
