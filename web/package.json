@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@smui/button": "^9.0.1",
-    "@smui/card": "^9.0.1",
+    "@smui/card": "^9.0.2",
     "@smui/data-table": "^9.0.1",
     "@smui/drawer": "^9.0.1",
     "@smui/linear-progress": "^9.0.1",
